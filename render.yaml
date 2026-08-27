@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: oran-eslestirme-botu
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ODDS_PROVIDER
+        value: mock
+      - key: SPORT_KEYS
+        value: soccer_epl,soccer_uefa_champs_league
+      - key: BOOKMAKER_KEYS
+        value: pinnacle,betfair_ex_eu,betfair,bet365
+      - key: REGIONS
+        value: eu,uk
+      - key: ODDS_TOLERANCE_PERCENT
+        value: "2"
+      - key: POLL_INTERVAL_SECONDS
+        value: "60"
+      - key: MAX_QUOTE_AGE_SECONDS
+        value: "300"
+      - key: MAX_LIVE_EVENT_AGE_MINUTES
+        value: "180"
+      - key: ALERT_COOLDOWN_SECONDS
+        value: "600"
+      - key: DRY_RUN
+        value: "true"
+      - key: ODDS_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true

@@ -1,0 +1,24 @@
+export type LogFields = Record<string, unknown>;
+
+function write(level: "info" | "warn" | "error", message: string, fields: LogFields = {}): void {
+  const record = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...fields,
+  };
+  const line = JSON.stringify(record);
+  if (level === "error") console.error(line);
+  else if (level === "warn") console.warn(line);
+  else console.info(line);
+}
+
+export const logger = {
+  info: (message: string, fields?: LogFields) => write("info", message, fields),
+  warn: (message: string, fields?: LogFields) => write("warn", message, fields),
+  error: (message: string, fields?: LogFields) => write("error", message, fields),
+};
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

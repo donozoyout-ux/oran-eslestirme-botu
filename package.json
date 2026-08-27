@@ -1,0 +1,28 @@
+{
+  "name": "oran-eslestirme-botu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Futbol oranlarini normalize edip yuzde 2 yakinlikta Telegram bildirimi gonderen demo servis.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run build && npm test",
+    "telegram:chat-id": "tsx src/scripts/get-telegram-chat-id.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
