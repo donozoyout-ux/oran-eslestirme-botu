@@ -1,0 +1,168 @@
+export const dashboardHtml = String.raw`<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>Oran Eşleştirme Botu</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 29, 48, .82);
+      --panel-2: rgba(19, 38, 62, .72);
+      --line: rgba(148, 181, 214, .16);
+      --text: #f4f8fc;
+      --muted: #92a8bd;
+      --cyan: #53d7ff;
+      --green: #53e6a5;
+      --amber: #ffcf70;
+      --red: #ff7b87;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(42, 137, 198, .2), transparent 32rem),
+        radial-gradient(circle at 90% 10%, rgba(48, 212, 160, .11), transparent 28rem),
+        var(--bg);
+    }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 56px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    .eyebrow { margin: 0 0 8px; color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(28px, 5vw, 48px); letter-spacing: -.045em; line-height: 1.02; }
+    .intro { max-width: 680px; margin: 13px 0 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
+    .live { display: inline-flex; align-items: center; gap: 9px; flex: none; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px; background: rgba(6, 15, 27, .7); color: var(--muted); font-size: 13px; font-weight: 700; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 5px rgba(255, 207, 112, .09); }
+    .live.ok .dot { background: var(--green); box-shadow: 0 0 0 5px rgba(83, 230, 165, .09); }
+    .live.bad .dot { background: var(--red); box-shadow: 0 0 0 5px rgba(255, 123, 135, .09); }
+    .alerts { display: grid; gap: 10px; margin-bottom: 18px; }
+    .notice { display: none; padding: 14px 16px; border: 1px solid rgba(255, 207, 112, .25); border-radius: 14px; background: rgba(255, 207, 112, .08); color: #ffe4a7; font-size: 13px; line-height: 1.55; }
+    .notice.show { display: block; }
+    .notice.error { border-color: rgba(255, 123, 135, .28); background: rgba(255, 123, 135, .08); color: #ffc1c7; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .card, .section { border: 1px solid var(--line); background: var(--panel); box-shadow: 0 18px 48px rgba(0, 0, 0, .18); backdrop-filter: blur(16px); }
+    .card { min-height: 152px; padding: 21px; border-radius: 18px; }
+    .label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+    .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: var(--cyan); background: rgba(83, 215, 255, .08); font-size: 14px; }
+    .metric { margin-top: 28px; font-size: clamp(25px, 3vw, 35px); font-weight: 800; letter-spacing: -.04em; }
+    .sub { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .lower { display: grid; grid-template-columns: 1.35fr .65fr; gap: 14px; margin-top: 14px; }
+    .section { border-radius: 18px; overflow: hidden; }
+    .section-head { display: flex; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
+    h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+    .updated { color: var(--muted); font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 16px 22px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+    tr:last-child td { border-bottom: 0; }
+    th { color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    td:last-child { text-align: right; font-weight: 720; }
+    .state-list { padding: 8px 22px; }
+    .state-row { display: flex; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .state-row:last-child { border-bottom: 0; }
+    .state-row span:first-child { color: var(--muted); }
+    .state-row span:last-child { text-align: right; font-weight: 680; }
+    footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 18px; color: #71879d; font-size: 11px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } .lower { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .shell { width: min(100% - 22px, 1180px); padding-top: 24px; } header { display: block; } .live { margin-top: 18px; } .grid { grid-template-columns: 1fr; } .card { min-height: 132px; } .metric { margin-top: 20px; } th, td { padding: 14px; } footer { display: block; line-height: 1.8; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">Canlı İzleme Paneli</p>
+        <h1>Oran Eşleştirme Botu</h1>
+        <p class="intro">Futbol oranlarını tarar, aynı maç ve pazardaki oranlar birbirine %2 yaklaştığında bildirime hazırlar.</p>
+      </div>
+      <div id="live" class="live"><span class="dot"></span><span id="liveText">Bağlanıyor</span></div>
+    </header>
+
+    <div class="alerts">
+      <div id="demoNotice" class="notice">Demo veri modu açık. Gerçek oranlar için Render ortamında veri sağlayıcısı ve API anahtarı tanımlanmalı.</div>
+      <div id="telegramNotice" class="notice">Telegram şu anda kapalı. Render ortamında yeni bot anahtarı tanımlanıp <b>DRY_RUN=false</b> yapılmalı.</div>
+      <div id="errorNotice" class="notice error"></div>
+    </div>
+
+    <section class="grid" aria-label="Özet metrikler">
+      <article class="card"><div class="label">Veri Kaynağı <span class="icon">◆</span></div><div id="provider" class="metric">—</div><div id="providerSub" class="sub">Yükleniyor</div></article>
+      <article class="card"><div class="label">Taranan Oran <span class="icon">↻</span></div><div id="quotes" class="metric">—</div><div class="sub">Son taramadaki güncel oranlar</div></article>
+      <article class="card"><div class="label">Yakın Eşleşme <span class="icon">≈</span></div><div id="matches" class="metric">—</div><div class="sub">%2 sınırını geçen pazarlar</div></article>
+      <article class="card"><div class="label">Bildirim <span class="icon">↗</span></div><div id="alertsSent" class="metric">—</div><div id="notifierSub" class="sub">Toplam gönderilen</div></article>
+    </section>
+
+    <section class="lower">
+      <div class="section">
+        <div class="section-head"><h2>Son tarama</h2><span id="updated" class="updated">—</span></div>
+        <table>
+          <thead><tr><th>Kontrol</th><th>Sonuç</th></tr></thead>
+          <tbody>
+            <tr><td>Çekilen toplam oran</td><td id="fetched">—</td></tr>
+            <tr><td>Güncel kabul edilen oran</td><td id="fresh">—</td></tr>
+            <tr><td>Bulunan yakın eşleşme</td><td id="found">—</td></tr>
+            <tr><td>Tekrar olduğu için bastırılan</td><td id="suppressed">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>Sistem durumu</h2></div>
+        <div class="state-list">
+          <div class="state-row"><span>Sağlık</span><span id="health">Kontrol ediliyor</span></div>
+          <div class="state-row"><span>Bildirim kanalı</span><span id="notifier">—</span></div>
+          <div class="state-row"><span>Toplam tarama</span><span id="runs">—</span></div>
+          <div class="state-row"><span>Son başarı</span><span id="success">—</span></div>
+        </div>
+      </div>
+    </section>
+    <footer><span>Oranlar yalnızca aynı maç, pazar, seçim ve çizgide karşılaştırılır.</span><span>Otomatik yenileme: 15 saniye</span></footer>
+  </main>
+  <script>
+    const el = (id) => document.getElementById(id);
+    const number = (value) => Number(value || 0).toLocaleString('tr-TR');
+    const date = (value) => value ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'Europe/Istanbul' }).format(new Date(value)) : 'Henüz yok';
+    function render(data) {
+      const run = data.lastRun || {};
+      const mock = data.provider === 'mock';
+      const telegram = data.notifier === 'telegram';
+      el('live').className = 'live ' + (data.lastError ? 'bad' : 'ok');
+      el('liveText').textContent = data.lastError ? 'Hata var' : 'Sistem çalışıyor';
+      el('provider').textContent = mock ? 'Demo' : 'Gerçek API';
+      el('providerSub').textContent = mock ? 'Mock veriler kullanılıyor' : data.provider;
+      el('quotes').textContent = number(run.quotesFresh);
+      el('matches').textContent = number(run.matchesFound);
+      el('alertsSent').textContent = number(data.totals && data.totals.alertsSent);
+      el('notifierSub').textContent = telegram ? 'Telegram aktif' : 'Telegram kapalı';
+      el('fetched').textContent = number(run.quotesFetched);
+      el('fresh').textContent = number(run.quotesFresh);
+      el('found').textContent = number(run.matchesFound);
+      el('suppressed').textContent = number(run.alertsSuppressed);
+      el('updated').textContent = run.finishedAt ? date(run.finishedAt) : 'İlk tarama bekleniyor';
+      el('health').textContent = data.lastError ? 'Hata' : 'Sağlıklı';
+      el('notifier').textContent = telegram ? 'Telegram' : 'Terminal / Demo';
+      el('runs').textContent = number(data.totals && data.totals.runs);
+      el('success').textContent = date(data.lastSuccessAt);
+      el('demoNotice').classList.toggle('show', mock);
+      el('telegramNotice').classList.toggle('show', !telegram);
+      el('errorNotice').classList.toggle('show', Boolean(data.lastError));
+      el('errorNotice').textContent = data.lastError ? 'Son hata: ' + data.lastError : '';
+    }
+    async function refresh() {
+      try {
+        const response = await fetch('/status', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Durum bilgisi alınamadı');
+        render(await response.json());
+      } catch (error) {
+        el('live').className = 'live bad';
+        el('liveText').textContent = 'Bağlantı hatası';
+        el('errorNotice').classList.add('show');
+        el('errorNotice').textContent = error instanceof Error ? error.message : String(error);
+      }
+    }
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>`;
