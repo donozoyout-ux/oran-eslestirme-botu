@@ -348,7 +348,7 @@ export class BetExplorerScraperProvider implements OddsProvider {
       for (const candidate of candidates) {
         if (signal?.aborted) throw signal.reason;
         try {
-          await page.goto(candidate.url, { waitUntil: "domcontentloaded", timeout: this.options.pageTimeoutMs });
+          await page.goto(candidate.url, { waitUntil: "commit", timeout: this.options.pageTimeoutMs });
           const currentUrl = new URL(page.url());
           if (currentUrl.origin !== BASE_URL || !currentUrl.pathname.startsWith("/football/")) {
             throw new Error("Beklenmeyen sayfa yonlendirmesi.");
