@@ -14,17 +14,22 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - Uc veya daha fazla kaynak uyustugunda yalnizca en yakin cifti bildirme
 - Telegram bildirimi veya guvenli `DRY_RUN` modu
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
+- Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
+- Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
+- Mac onunde `1X2` bookmaker karsilastirmasi
 - Tum futbol pazarlari icin genisletilebilir kanonik pazar modeli
 - Mock verilerle anahtarsiz calisan demo
 - `/health`, `/status` ve korumali `/run-once` uclari
 - Ana adreste otomatik yenilenen canli durum paneli
 - Docker, Render ve GitHub Actions yapilandirmasi
 
-## Onemli demo siniri
+## Veri kaynagi sinirlari
 
-`ODDS_PROVIDER=mock` durumunda Pinnacle, Betfair, bet365, Nesine, Misli ve Bilyoner adlariyla uretilen veriler **tamamen ornektir**. Gercek site verisi degildir.
+`ODDS_PROVIDER=mock` durumunda uretilen veriler **tamamen ornektir**. Gercek site verisi degildir.
 
-Ucretsiz The Odds API modu, yalnizca saglayicinin o anda sundugu bookmaker ve pazar verilerini getirir. Nesine, Misli ve Bilyoner icin kamuya acik/izinli bir veri erisimi saglanmadan dogrudan site kazima eklenmemistir. bet365 veya baska bir kaynaga, kullanim sartlarini ihlal eden kaziyici eklemeyin.
+`ODDS_PROVIDER=betexplorer_scraper`, BetExplorer'in giris gerektirmeyen oran karsilastirma sayfalarinda gorunen bookmaker satirlarini okur. Bet365, Betfair ve Betfair Exchange dahil, sayfanin o anda gosterdigi ve `BOOKMAKER_KEYS` ile izin verilen kaynaklar kullanilir. Site yapisi degisirse kaynak hata verebilir; sistem CAPTCHA, oturum, bolge engeli veya bot korumasi asmaz.
+
+Nesine, Misli ve Bilyoner bu sunucudan acilan herkese acik sayfada kullanilabilir oran tablosu dondurmedigi icin gercek kaynak olarak etiketlenmez. Onlar icin resmi/lisansli veri erisimi gerekir.
 
 ## Karsilastirma kurali
 
@@ -62,6 +67,22 @@ Servis acildiktan sonra:
 curl http://localhost:3000/health
 curl http://localhost:3000/status
 ```
+
+## Web scraping modu
+
+Docker veya sistemde kurulu Chromium gerektirir. Render yapilandirmasi Chromium'u otomatik kurar.
+
+```dotenv
+ODDS_PROVIDER=betexplorer_scraper
+BOOKMAKER_KEYS=bet365,betfair,betfair_ex_eu,pinnacle
+SCRAPER_MAX_MATCHES=4
+SCRAPER_PAGE_TIMEOUT_MS=25000
+SCRAPER_WAIT_MS=2500
+POLL_INTERVAL_SECONDS=180
+DRY_RUN=true
+```
+
+Her taramada canli maclara oncelik verilir ve en fazla `SCRAPER_MAX_MATCHES` sayfa okunur. Dusuk frekans varsayilani hedef siteyi gereksiz yukten korur. Canli sayfada standart pazarlar, mac onunde ilk surumde `1X2` taranir.
 
 ## Ucretsiz API demosu
 
@@ -108,11 +129,15 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 
 | Degisken | Varsayilan | Aciklama |
 | --- | ---: | --- |
-| `ODDS_PROVIDER` | `mock` | `mock` veya `the_odds_api` |
+| `ODDS_PROVIDER` | `mock` | `mock`, `the_odds_api` veya `betexplorer_scraper` |
 | `SPORT_KEYS` | iki futbol ligi | Virgul ayrimli lig anahtarlari |
 | `BOOKMAKER_KEYS` | secilen kaynaklar | Virgul ayrimli bookmaker anahtarlari |
 | `ODDS_TOLERANCE_PERCENT` | `2` | Bildirim icin azami goreli fark |
 | `POLL_INTERVAL_SECONDS` | `60` | Tarama araligi; en az 10 saniye |
+| `SCRAPER_MAX_MATCHES` | `4` | Bir turda acilacak azami mac sayfasi |
+| `SCRAPER_PAGE_TIMEOUT_MS` | `25000` | Bir scraper sayfasi icin zaman asimi |
+| `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
+| `CHROMIUM_EXECUTABLE_PATH` | bos | Chromium calistirilabilir dosya yolu |
 | `MAX_QUOTE_AGE_SECONDS` | `300` | Bayat veri esigi |
 | `MAX_LIVE_EVENT_AGE_MINUTES` | `180` | Baslangictan sonra canli sayilacak azami sure |
 | `ALERT_COOLDOWN_SECONDS` | `600` | Ayni eslesme icin tekrar bekleme suresi |
@@ -126,9 +151,9 @@ Depoda `render.yaml` ve `Dockerfile` hazirdir.
 
 1. Projeyi yeni, ozel bir GitHub reposuna gonderin.
 2. Render'da **New > Blueprint** ile repoyu secin.
-3. Ilk dagitimda `ODDS_PROVIDER=mock` ve `DRY_RUN=true` ile saglik kontrolu yapin.
-4. Ardindan `ODDS_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` degerlerini Render Environment bolumune ekleyin.
-5. `ODDS_PROVIDER=the_odds_api` ve `DRY_RUN=false` yapin.
+3. Blueprint varsayilan olarak `ODDS_PROVIDER=betexplorer_scraper` ve `DRY_RUN=true` ile gercek oranlari panelde test eder.
+4. Yeni `TELEGRAM_BOT_TOKEN` ve `TELEGRAM_CHAT_ID` degerlerini Render Environment bolumune ekleyin.
+5. Bildirim testi tamamlaninca `DRY_RUN=false` yapin.
 
 Render ucretsiz web servisleri uykuya alinabilir. Kesintisiz, dakikalik tarama icin uyumayan bir servis plani veya surekli calisan baska bir sunucu gerekir. Yerel JSON durum dosyasi yeniden dagitimda kaybolabilir; uretim asamasinda PostgreSQL/Redis tabanli durum deposuna gecilmelidir.
 
@@ -153,7 +178,7 @@ docker build -t oran-eslestirme-botu .
 docker run --rm -p 3000:3000 --env-file .env oran-eslestirme-botu
 ```
 
-Testler; `%2` hesabi, bayat veri, farkli cizgi, canli/mac onu ayrimi, ayni bookmaker'i dislama, API donusumu ve bildirim cooldown davranisini kapsar.
+Testler; `%2` hesabi, bayat veri, farkli cizgi, canli/mac onu ayrimi, ayni bookmaker'i dislama, API donusumu, scraper HTML donusumu ve bildirim cooldown davranisini kapsar.
 
 ## Sonraki surum
 

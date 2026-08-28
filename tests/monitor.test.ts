@@ -56,5 +56,7 @@ describe("OddsMonitor", () => {
     expect(second.alertsSent).toBe(0);
     expect(second.alertsSuppressed).toBe(1);
     expect(notifier.sent).toHaveLength(1);
+    expect(monitor.getStatus().recentQuotes).toHaveLength(2);
+    expect(monitor.getStatus().recentMatches).toHaveLength(1);
   });
 });

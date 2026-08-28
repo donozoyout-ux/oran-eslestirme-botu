@@ -6,7 +6,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: ODDS_PROVIDER
-        value: mock
+        value: betexplorer_scraper
       - key: SPORT_KEYS
         value: soccer_epl,soccer_uefa_champs_league
       - key: BOOKMAKER_KEYS
@@ -16,7 +16,13 @@ services:
       - key: ODDS_TOLERANCE_PERCENT
         value: "2"
       - key: POLL_INTERVAL_SECONDS
-        value: "60"
+        value: "180"
+      - key: SCRAPER_MAX_MATCHES
+        value: "4"
+      - key: SCRAPER_PAGE_TIMEOUT_MS
+        value: "25000"
+      - key: SCRAPER_WAIT_MS
+        value: "2500"
       - key: MAX_QUOTE_AGE_SECONDS
         value: "300"
       - key: MAX_LIVE_EVENT_AGE_MINUTES

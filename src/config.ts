@@ -1,7 +1,7 @@
 import "dotenv/config";
 import path from "node:path";
 
-export type ProviderName = "mock" | "the_odds_api";
+export type ProviderName = "mock" | "the_odds_api" | "betexplorer_scraper";
 
 export interface AppConfig {
   provider: ProviderName;
@@ -9,6 +9,10 @@ export interface AppConfig {
   sportKeys: string[];
   bookmakerKeys: string[];
   regions: string[];
+  scraperMaxMatches: number;
+  scraperPageTimeoutMs: number;
+  scraperWaitMs: number;
+  chromiumExecutablePath?: string;
   tolerancePercent: number;
   pollIntervalSeconds: number;
   maxQuoteAgeSeconds: number;
@@ -53,8 +57,8 @@ function booleanValue(name: string, fallback: boolean): boolean {
 
 export function loadConfig(): AppConfig {
   const providerRaw = optional("ODDS_PROVIDER") ?? "mock";
-  if (providerRaw !== "mock" && providerRaw !== "the_odds_api") {
-    throw new Error("ODDS_PROVIDER mock veya the_odds_api olmali.");
+  if (providerRaw !== "mock" && providerRaw !== "the_odds_api" && providerRaw !== "betexplorer_scraper") {
+    throw new Error("ODDS_PROVIDER mock, the_odds_api veya betexplorer_scraper olmali.");
   }
 
   const config: AppConfig = {
@@ -63,6 +67,10 @@ export function loadConfig(): AppConfig {
     sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league"),
     bookmakerKeys: csv("BOOKMAKER_KEYS", "pinnacle,betfair_ex_eu,betfair,bet365"),
     regions: csv("REGIONS", "eu,uk"),
+    scraperMaxMatches: numberValue("SCRAPER_MAX_MATCHES", 4, { min: 1, max: 10 }),
+    scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 25_000, { min: 5_000, max: 60_000 }),
+    scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
+    chromiumExecutablePath: optional("CHROMIUM_EXECUTABLE_PATH"),
     tolerancePercent: numberValue("ODDS_TOLERANCE_PERCENT", 2, { min: 0, max: 100 }),
     pollIntervalSeconds: numberValue("POLL_INTERVAL_SECONDS", 60, { min: 10, max: 86_400 }),
     maxQuoteAgeSeconds: numberValue("MAX_QUOTE_AGE_SECONDS", 300, { min: 1, max: 86_400 }),

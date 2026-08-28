@@ -90,8 +90,26 @@ export const dashboardHtml = String.raw`<!doctype html>
     <section class="grid" aria-label="Özet metrikler">
       <article class="card"><div class="label">Veri Kaynağı <span class="icon">◆</span></div><div id="provider" class="metric">—</div><div id="providerSub" class="sub">Yükleniyor</div></article>
       <article class="card"><div class="label">Taranan Oran <span class="icon">↻</span></div><div id="quotes" class="metric">—</div><div class="sub">Son taramadaki güncel oranlar</div></article>
-      <article class="card"><div class="label">Yakın Eşleşme <span class="icon">≈</span></div><div id="matches" class="metric">—</div><div class="sub">%2 sınırını geçen pazarlar</div></article>
+      <article class="card"><div class="label">Yakın Eşleşme <span class="icon">≈</span></div><div id="matches" class="metric">—</div><div class="sub">%2 sınırının içindeki pazarlar</div></article>
       <article class="card"><div class="label">Bildirim <span class="icon">↗</span></div><div id="alertsSent" class="metric">—</div><div id="notifierSub" class="sub">Toplam gönderilen</div></article>
+    </section>
+    <section class="section" style="margin-top:14px">
+      <div class="section-head"><h2>Son okunan gerçek oranlar</h2><span class="updated">En fazla 40 kayıt</span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Maç</th><th>Durum</th><th>Pazar / Seçim</th><th>Bookmaker</th><th>Oran</th></tr></thead>
+          <tbody id="recentQuotes"><tr><td colspan="5">İlk gerçek tarama bekleniyor.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="section" style="margin-top:14px">
+      <div class="section-head"><h2>Son yakın oranlar</h2><span class="updated">En fazla 20 eşleşme</span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Maç</th><th>Durum</th><th>Pazar / Seçim</th><th>Kaynaklar</th><th>Fark</th></tr></thead>
+          <tbody id="recentMatches"><tr><td colspan="5">İlk gerçek tarama bekleniyor.</td></tr></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="lower">
@@ -126,10 +144,11 @@ export const dashboardHtml = String.raw`<!doctype html>
     function render(data) {
       const run = data.lastRun || {};
       const mock = data.provider === 'mock';
+      const scraper = data.provider === 'betexplorer_scraper';
       const telegram = data.notifier === 'telegram';
       el('live').className = 'live ' + (data.lastError ? 'bad' : 'ok');
       el('liveText').textContent = data.lastError ? 'Hata var' : 'Sistem çalışıyor';
-      el('provider').textContent = mock ? 'Demo' : 'Gerçek API';
+      el('provider').textContent = mock ? 'Demo' : (scraper ? 'Web Tarama' : 'Gerçek API');
       el('providerSub').textContent = mock ? 'Mock veriler kullanılıyor' : data.provider;
       el('quotes').textContent = number(run.quotesFresh);
       el('matches').textContent = number(run.matchesFound);
@@ -148,6 +167,62 @@ export const dashboardHtml = String.raw`<!doctype html>
       el('telegramNotice').classList.toggle('show', !telegram);
       el('errorNotice').classList.toggle('show', Boolean(data.lastError));
       el('errorNotice').textContent = data.lastError ? 'Son hata: ' + data.lastError : '';
+      const quotesBody = el('recentQuotes');
+      quotesBody.replaceChildren();
+      const recentQuotes = Array.isArray(data.recentQuotes) ? data.recentQuotes : [];
+      if (recentQuotes.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5;
+        cell.textContent = 'Bu taramada gösterilecek güncel oran bulunmadı.';
+        row.appendChild(cell);
+        quotesBody.appendChild(row);
+      } else {
+        for (const quote of recentQuotes) {
+          const row = document.createElement('tr');
+          const values = [
+            quote.event,
+            quote.phase === 'live' ? 'CANLI' : 'MAÇ ÖNÜ',
+            quote.market + ' / ' + quote.selection + (quote.line === null ? '' : ' (' + quote.line + ')'),
+            quote.bookmaker,
+            Number(quote.price).toFixed(2),
+          ];
+          for (const value of values) {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            row.appendChild(cell);
+          }
+          quotesBody.appendChild(row);
+        }
+      }
+      const recentBody = el('recentMatches');
+      recentBody.replaceChildren();
+      const matches = Array.isArray(data.recentMatches) ? data.recentMatches : [];
+      if (matches.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5;
+        cell.textContent = 'Bu taramada %2 içinde eşleşme bulunmadı.';
+        row.appendChild(cell);
+        recentBody.appendChild(row);
+      } else {
+        for (const match of matches) {
+          const row = document.createElement('tr');
+          const values = [
+            match.event,
+            match.phase === 'live' ? 'CANLI' : 'MAÇ ÖNÜ',
+            match.market + ' / ' + match.selection + (match.line === null ? '' : ' (' + match.line + ')'),
+            match.bookmakerA + ' ' + Number(match.priceA).toFixed(2) + ' ↔ ' + match.bookmakerB + ' ' + Number(match.priceB).toFixed(2),
+            '%' + Number(match.differencePercent).toFixed(2),
+          ];
+          for (const value of values) {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            row.appendChild(cell);
+          }
+          recentBody.appendChild(row);
+        }
+      }
     }
     async function refresh() {
       try {

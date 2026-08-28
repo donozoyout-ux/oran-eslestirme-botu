@@ -36,7 +36,16 @@ try {
   const shutdown = (signal: string): void => {
     logger.info("Servis kapatiliyor.", { signal });
     monitor.stop();
-    server.close(() => process.exit(0));
+    server.close(() => {
+      if (!provider.close) {
+        process.exit(0);
+        return;
+      }
+      void provider
+        .close()
+        .catch((error) => logger.warn("Saglayici kapatilamadi.", { error: errorMessage(error) }))
+        .finally(() => process.exit(0));
+    });
     setTimeout(() => process.exit(1), 10_000).unref();
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));

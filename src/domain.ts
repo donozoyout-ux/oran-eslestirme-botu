@@ -51,6 +51,7 @@ export interface OddsMatch {
 export interface OddsProvider {
   readonly name: string;
   fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]>;
+  close?(): Promise<void>;
 }
 
 export interface Notifier {

@@ -17,6 +17,29 @@ export interface MonitorStatus {
   lastErrorAt: string | null;
   lastError: string | null;
   lastRun: RunSummary | null;
+  recentQuotes: Array<{
+    event: string;
+    phase: "prematch" | "live";
+    market: string;
+    selection: string;
+    line: number | null;
+    bookmaker: string;
+    price: number;
+    updatedAt: string;
+  }>;
+  recentMatches: Array<{
+    event: string;
+    phase: "prematch" | "live";
+    market: string;
+    selection: string;
+    line: number | null;
+    bookmakerA: string;
+    priceA: number;
+    bookmakerB: string;
+    priceB: number;
+    differencePercent: number;
+    detectedAt: string;
+  }>;
   totals: {
     runs: number;
     alertsSent: number;
@@ -45,6 +68,8 @@ export class OddsMonitor {
       lastErrorAt: null,
       lastError: null,
       lastRun: null,
+      recentQuotes: [],
+      recentMatches: [],
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     };
   }
@@ -88,13 +113,14 @@ export class OddsMonitor {
     this.statusValue.running = true;
     try {
       const quotes = await this.provider.fetchQuotes();
+      const comparisonTime = new Date();
       const comparison = findOddsMatches(
         quotes,
         {
           tolerancePercent: this.options.tolerancePercent,
           maxQuoteAgeSeconds: this.options.maxQuoteAgeSeconds,
         },
-        startedAt,
+        comparisonTime,
       );
       let alertsSent = 0;
       let alertsSuppressed = 0;
@@ -126,6 +152,29 @@ export class OddsMonitor {
         alertsSuppressed,
       };
       this.statusValue.lastRun = summary;
+      this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 40).map((quote) => ({
+        event: `${quote.homeTeam} - ${quote.awayTeam}`,
+        phase: quote.phase,
+        market: quote.marketName,
+        selection: quote.selectionName,
+        line: quote.line,
+        bookmaker: quote.bookmakerName,
+        price: quote.price,
+        updatedAt: quote.updatedAt,
+      }));
+      this.statusValue.recentMatches = comparison.matches.slice(0, 20).map((match) => ({
+        event: `${match.quoteA.homeTeam} - ${match.quoteA.awayTeam}`,
+        phase: match.phase,
+        market: match.quoteA.marketName,
+        selection: match.quoteA.selectionName,
+        line: match.quoteA.line,
+        bookmakerA: match.quoteA.bookmakerName,
+        priceA: match.quoteA.price,
+        bookmakerB: match.quoteB.bookmakerName,
+        priceB: match.quoteB.price,
+        differencePercent: Number(match.relativeDifferencePercent.toFixed(2)),
+        detectedAt: match.detectedAt,
+      }));
       this.statusValue.lastSuccessAt = finishedAt.toISOString();
       this.statusValue.lastError = null;
       this.statusValue.totals.runs += 1;
