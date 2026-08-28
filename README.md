@@ -29,6 +29,8 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 
 `ODDS_PROVIDER=betexplorer_scraper`, BetExplorer'in giris gerektirmeyen oran karsilastirma sayfalarinda gorunen bookmaker satirlarini okur. Bet365, Betfair ve Betfair Exchange dahil, sayfanin o anda gosterdigi ve `BOOKMAKER_KEYS` ile izin verilen kaynaklar kullanilir. Site yapisi degisirse kaynak hata verebilir; sistem CAPTCHA, oturum, bolge engeli veya bot korumasi asmaz.
 
+Eski Render servislerinde kalmis `ODDS_PROVIDER=mock` degeri, `NODE_ENV=production` ortaminda otomatik olarak scraper'a yukseltirilir. Uretimde ozellikle demo istenirse `ALLOW_MOCK_IN_PRODUCTION=true` ayarlanabilir.
+
 Nesine, Misli ve Bilyoner bu sunucudan acilan herkese acik sayfada kullanilabilir oran tablosu dondurmedigi icin gercek kaynak olarak etiketlenmez. Onlar icin resmi/lisansli veri erisimi gerekir.
 
 ## Karsilastirma kurali
@@ -130,6 +132,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | Degisken | Varsayilan | Aciklama |
 | --- | ---: | --- |
 | `ODDS_PROVIDER` | `mock` | `mock`, `the_odds_api` veya `betexplorer_scraper` |
+| `ALLOW_MOCK_IN_PRODUCTION` | `false` | Eski Render ayarinda gercek taramaya otomatik gecisi kapatir |
 | `SPORT_KEYS` | iki futbol ligi | Virgul ayrimli lig anahtarlari |
 | `BOOKMAKER_KEYS` | secilen kaynaklar | Virgul ayrimli bookmaker anahtarlari |
 | `ODDS_TOLERANCE_PERCENT` | `2` | Bildirim icin azami goreli fark |

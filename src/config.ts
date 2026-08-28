@@ -56,7 +56,12 @@ function booleanValue(name: string, fallback: boolean): boolean {
 }
 
 export function loadConfig(): AppConfig {
-  const providerRaw = optional("ODDS_PROVIDER") ?? "mock";
+  const configuredProvider = optional("ODDS_PROVIDER") ?? "mock";
+  const upgradeLegacyProductionMock =
+    configuredProvider === "mock" &&
+    process.env.NODE_ENV === "production" &&
+    !booleanValue("ALLOW_MOCK_IN_PRODUCTION", false);
+  const providerRaw = upgradeLegacyProductionMock ? "betexplorer_scraper" : configuredProvider;
   if (providerRaw !== "mock" && providerRaw !== "the_odds_api" && providerRaw !== "betexplorer_scraper") {
     throw new Error("ODDS_PROVIDER mock, the_odds_api veya betexplorer_scraper olmali.");
   }
