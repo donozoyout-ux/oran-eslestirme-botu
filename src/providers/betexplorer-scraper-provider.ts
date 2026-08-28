@@ -357,9 +357,13 @@ export class BetExplorerScraperProvider implements OddsProvider {
           if (currentUrl.origin !== BASE_URL || !currentUrl.pathname.startsWith("/football/")) {
             throw new Error("Beklenmeyen sayfa yonlendirmesi.");
           }
-          await page.waitForSelector("#bestOddsComponent", { timeout: this.options.pageTimeoutMs });
+          await page.waitForSelector("#bestOddsComponent", {
+            state: "attached",
+            timeout: this.options.pageTimeoutMs,
+          });
           await page
             .waitForSelector(".oddsComparison__liveOdds_row, .oddsComparisonAll__rowBookie", {
+              state: "attached",
               timeout: Math.min(this.options.pageTimeoutMs, 8_000),
             })
             .catch(() => undefined);
