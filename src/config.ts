@@ -33,6 +33,10 @@ export interface AppConfig {
   adminToken?: string;
   stateFile: string;
   dailySheetFile: string;
+  googleSheetsSpreadsheetId?: string;
+  googleServiceAccountEmail?: string;
+  googlePrivateKey?: string;
+  googleSheetsSyncMinutes: number;
 }
 
 function optional(name: string): string | undefined {
@@ -105,6 +109,10 @@ export function loadConfig(): AppConfig {
     adminToken: optional("ADMIN_TOKEN"),
     stateFile: path.resolve(optional("STATE_FILE") ?? "./data/alert-state.json"),
     dailySheetFile: path.resolve(optional("DAILY_SHEET_FILE") ?? "./data/daily-match-sheet.json"),
+    googleSheetsSpreadsheetId: optional("GOOGLE_SHEETS_SPREADSHEET_ID"),
+    googleServiceAccountEmail: optional("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
+    googlePrivateKey: optional("GOOGLE_PRIVATE_KEY"),
+    googleSheetsSyncMinutes: numberValue("GOOGLE_SHEETS_SYNC_MINUTES", 15, { min: 5, max: 1_440 }),
   };
 
   if (config.provider === "the_odds_api" && !config.oddsApiKey) {
@@ -112,6 +120,12 @@ export function loadConfig(): AppConfig {
   }
   if (!config.dryRun && (!config.telegramBotToken || !config.telegramChatId)) {
     throw new Error("DRY_RUN=false iken TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID gerekli.");
+  }
+  const googleValues = [config.googleSheetsSpreadsheetId, config.googleServiceAccountEmail, config.googlePrivateKey];
+  if (googleValues.some(Boolean) && !googleValues.every(Boolean)) {
+    throw new Error(
+      "Google Sheets icin GOOGLE_SHEETS_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL ve GOOGLE_PRIVATE_KEY birlikte gerekli.",
+    );
   }
   return config;
 }

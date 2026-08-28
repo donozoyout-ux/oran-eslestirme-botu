@@ -56,12 +56,21 @@ describe("gunluk mac tablosu", () => {
       phase: "prematch",
     };
     await sheet.record([fixture], [quote(2.6, firstCapture.toISOString(), commenceTime)], [], firstCapture);
-    await sheet.record([fixture], [quote(2.34, secondCapture.toISOString(), commenceTime)], [], secondCapture);
+    const movement = await sheet.record(
+      [fixture],
+      [quote(2.34, secondCapture.toISOString(), commenceTime)],
+      [],
+      secondCapture,
+    );
 
     const snapshot = sheet.getSnapshot();
     expect(snapshot.fixtures).toHaveLength(1);
     expect(snapshot.oddsSnapshotCount).toBe(2);
     expect(snapshot.recentSignals[0]).toMatchObject({ type: "odds_drop", line: 2.5 });
+    expect(movement.pendingMovementSignals).toHaveLength(1);
+    await sheet.markSignalNotified(movement.pendingMovementSignals[0]!.id, secondCapture);
+    const afterNotification = await sheet.record([fixture], [], [], secondCapture);
+    expect(afterNotification.pendingMovementSignals).toHaveLength(0);
     expect(sheet.fixturesCsv()).toContain("Test Ligi");
     expect(sheet.oddsHistoryCsv()).toContain("2.34");
   });

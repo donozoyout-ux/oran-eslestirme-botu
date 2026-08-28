@@ -18,7 +18,9 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - Gun basinda fiksturu ayiran ve panelde `Gunun Maclari` tablosuna kaydeden planlayici
 - Maca 6 saatten fazla varken bekleyen; 6 saat, 1 saat, son 15 dakika ve canli icin farkli tarama araliklari
 - Acilis oranina gore varsayilan `%8` dusus/yukselis sinyali ve gunluk oran gecmisi
+- `%8` esigi ilk kez gecildiginde acilis/guncel oran aciklamali Telegram hareket bildirimi
 - Gunluk mac listesini ve oran gecmisini Google Sheets/Excel uyumlu CSV olarak indirme
+- Opsiyonel Google Sheets canli aynasi: `Maclar`, `Oran_Gecmisi`, `Sinyaller`
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
 - Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
 - Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
@@ -99,6 +101,22 @@ Liste sayfasi her dongude hafif olarak okunur ve o gunun maclari saklanir. Oran 
 
 Paneldeki `Maclari indir` ve `Oran gecmisini indir` baglantilari CSV uretir. Bu dosyalar dogrudan Google Sheets veya Excel'e aktarilabilir. Google Sheets'e API ile otomatik yazma icin ayrica bir Google servis hesabi ve hedef Sheet kimligi gerekir; ana tarama bu baglanti olmadan da calisir.
 
+## Google Sheets otomatik senkronizasyon
+
+1. Google Cloud projesinde **Google Sheets API** hizmetini acin.
+2. Bir servis hesabi olusturup JSON anahtarini indirin.
+3. Bos bir Google Sheet olusturun ve servis hesabinin e-posta adresine **Duzenleyici** yetkisi verin.
+4. Render Environment bolumune su gizli degerleri ekleyin:
+
+```dotenv
+GOOGLE_SHEETS_SPREADSHEET_ID=sheet_linkindeki_d_ile_edit_arasindaki_kimlik
+GOOGLE_SERVICE_ACCOUNT_EMAIL=servis-hesabi@proje.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_SHEETS_SYNC_MINUTES=15
+```
+
+Uygulama `Maclar`, `Oran_Gecmisi` ve `Sinyaller` sekmelerini otomatik acar; baslik satirlarini sabitler, filtreleri ve okunabilir sutun genisliklerini uygular. Servis hesabi ozel anahtarini GitHub'a veya mesajlasma ekranina koymayin; yalnizca Render gizli ortam degiskeninde saklayin.
+
 ## Ucretsiz API demosu
 
 1. [The Odds API](https://the-odds-api.com/) uzerinden bir API anahtari alin.
@@ -169,6 +187,10 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `ADMIN_TOKEN` | bos | `/run-once` ucunu acar ve korur |
 | `STATE_FILE` | `./data/alert-state.json` | Bildirim tekillestirme durumu |
 | `DAILY_SHEET_FILE` | `./data/daily-match-sheet.json` | Gunluk fikstur, oran gecmisi ve sinyal tablosu |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | bos | Otomatik yazilacak Google Sheet kimligi veya tam baglantisi |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | bos | Sheet'e Duzenleyici verilen servis hesabi e-postasi |
+| `GOOGLE_PRIVATE_KEY` | bos | Servis hesabi RSA ozel anahtari; yalnizca gizli ortam degiskeni |
+| `GOOGLE_SHEETS_SYNC_MINUTES` | `15` | Uc sekmenin Google Sheets'e yenilenme araligi |
 
 ## Render'a dagitim
 

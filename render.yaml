@@ -45,6 +45,8 @@ services:
         value: "2.5"
       - key: ODDS_MOVEMENT_THRESHOLD_PERCENT
         value: "8"
+      - key: GOOGLE_SHEETS_SYNC_MINUTES
+        value: "15"
       - key: DRY_RUN
         value: "true"
       - key: ODDS_API_KEY
@@ -52,6 +54,12 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_PRIVATE_KEY
         sync: false
       - key: ADMIN_TOKEN
         generateValue: true

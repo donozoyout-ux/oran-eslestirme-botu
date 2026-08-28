@@ -32,6 +32,7 @@ function monitorStub(): OddsMonitor {
       quotesFresh: 0,
       matchesFound: 0,
       alertsSent: 0,
+      movementAlertsSent: 0,
       alertsSuppressed: 0,
     }),
     getDailyFixturesCsv: () => "\uFEFFTarih\r\n",

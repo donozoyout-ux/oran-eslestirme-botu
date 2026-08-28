@@ -68,6 +68,8 @@ export const dashboardHtml = String.raw`<!doctype html>
     .state-row:last-child { border-bottom: 0; }
     .state-row span:first-child { color: var(--muted); }
     .state-row span:last-child { text-align: right; font-weight: 680; }
+    .state-row a { color: var(--cyan); text-decoration: none; }
+    .state-row a:hover { text-decoration: underline; }
     footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 18px; color: #71879d; font-size: 11px; }
     @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } .lower { grid-template-columns: 1fr; } }
     @media (max-width: 560px) { .shell { width: min(100% - 22px, 1180px); padding-top: 24px; } header { display: block; } .live { margin-top: 18px; } .grid { grid-template-columns: 1fr; } .card { min-height: 132px; } .metric { margin-top: 20px; } th, td { padding: 14px; } footer { display: block; line-height: 1.8; } }
@@ -147,6 +149,7 @@ export const dashboardHtml = String.raw`<!doctype html>
             <tr><td>Çekilen toplam oran</td><td id="fetched">—</td></tr>
             <tr><td>Güncel kabul edilen oran</td><td id="fresh">—</td></tr>
             <tr><td>Bulunan yakın eşleşme</td><td id="found">—</td></tr>
+            <tr><td>Gönderilen oran hareketi bildirimi</td><td id="movementAlerts">—</td></tr>
             <tr><td>Tekrar olduğu için bastırılan</td><td id="suppressed">—</td></tr>
           </tbody>
         </table>
@@ -156,6 +159,7 @@ export const dashboardHtml = String.raw`<!doctype html>
         <div class="state-list">
           <div class="state-row"><span>Sağlık</span><span id="health">Kontrol ediliyor</span></div>
           <div class="state-row"><span>Bildirim kanalı</span><span id="notifier">—</span></div>
+          <div class="state-row"><span>Google Sheets</span><span><a id="googleSheets" rel="noreferrer">—</a></span></div>
           <div class="state-row"><span>Toplam tarama</span><span id="runs">—</span></div>
           <div class="state-row"><span>Son başarı</span><span id="success">—</span></div>
         </div>
@@ -172,7 +176,8 @@ export const dashboardHtml = String.raw`<!doctype html>
       const mock = data.provider === 'mock';
       const scraper = data.provider === 'betexplorer_scraper';
       const telegram = data.notifier === 'telegram';
-      const sheet = data.dailySheet || { fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [] };
+      const sheet = data.dailySheet || { fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [], googleSheets: { enabled: false } };
+      const googleSheets = sheet.googleSheets || { enabled: false, url: null, lastSuccessAt: null, lastError: null };
       el('live').className = 'live ' + (data.lastError ? 'bad' : 'ok');
       el('liveText').textContent = data.lastError ? 'Hata var' : 'Sistem çalışıyor';
       el('provider').textContent = mock ? 'Demo' : (scraper ? 'Web Tarama' : 'Gerçek API');
@@ -187,10 +192,21 @@ export const dashboardHtml = String.raw`<!doctype html>
       el('fetched').textContent = number(run.quotesFetched);
       el('fresh').textContent = number(run.quotesFresh);
       el('found').textContent = number(run.matchesFound);
+      el('movementAlerts').textContent = number(run.movementAlertsSent);
       el('suppressed').textContent = number(run.alertsSuppressed);
       el('updated').textContent = run.finishedAt ? date(run.finishedAt) : 'İlk tarama bekleniyor';
       el('health').textContent = data.lastError ? 'Hata' : 'Sağlıklı';
       el('notifier').textContent = telegram ? 'Telegram' : 'Terminal / Demo';
+      const googleLink = el('googleSheets');
+      googleLink.textContent = !googleSheets.enabled ? 'Kapalı' : (googleSheets.lastError ? 'Hata var' : (googleSheets.lastSuccessAt ? 'Senkronize' : 'Bağlantı bekleniyor'));
+      if (googleSheets.url) {
+        googleLink.href = googleSheets.url;
+        googleLink.target = '_blank';
+      } else {
+        googleLink.removeAttribute('href');
+        googleLink.removeAttribute('target');
+      }
+      googleLink.title = googleSheets.lastError || (googleSheets.lastSuccessAt ? 'Son başarı: ' + date(googleSheets.lastSuccessAt) : '');
       el('runs').textContent = number(data.totals && data.totals.runs);
       el('success').textContent = date(data.lastSuccessAt);
       el('demoNotice').classList.toggle('show', mock);

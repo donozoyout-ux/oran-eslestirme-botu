@@ -135,21 +135,38 @@ export class OddsMonitor {
         },
         comparisonTime,
       );
+      let alertsSent = 0;
+      let movementAlertsSent = 0;
+      let alertsSuppressed = 0;
       try {
-        await this.dailySheet.record(
+        const sheetResult = await this.dailySheet.record(
           this.provider.getLastFixtures?.() ?? [],
           comparison.freshQuotes,
           comparison.matches,
           comparisonTime,
         );
         this.statusValue.dailySheet = this.dailySheet.getSnapshot();
+        if (this.notifier.sendAnalysisSignal) {
+          for (const signal of sheetResult.pendingMovementSignals) {
+            try {
+              await this.notifier.sendAnalysisSignal(signal);
+              await this.dailySheet.markSignalNotified(signal.id, new Date());
+              alertsSent += 1;
+              movementAlertsSent += 1;
+            } catch (error) {
+              this.statusValue.totals.errors += 1;
+              logger.error("Oran hareketi bildirimi gonderilemedi.", {
+                signalId: signal.id,
+                error: errorMessage(error),
+              });
+            }
+          }
+          this.statusValue.dailySheet = this.dailySheet.getSnapshot();
+        }
       } catch (error) {
         this.statusValue.totals.errors += 1;
         logger.warn("Gunluk mac tablosu kaydedilemedi.", { error: errorMessage(error) });
       }
-      let alertsSent = 0;
-      let alertsSuppressed = 0;
-
       for (const match of comparison.matches) {
         const now = new Date();
         if (!this.alertStore.shouldSend(match.id, now)) {
@@ -174,6 +191,7 @@ export class OddsMonitor {
         quotesFresh: comparison.freshQuotes.length,
         matchesFound: comparison.matches.length,
         alertsSent,
+        movementAlertsSent,
         alertsSuppressed,
       };
       this.statusValue.lastRun = summary;

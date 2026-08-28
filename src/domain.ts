@@ -61,6 +61,22 @@ export interface OddsMatch {
   detectedAt: string;
 }
 
+export interface OddsAnalysisSignal {
+  id: string;
+  type: "close_odds" | "odds_drop" | "odds_rise";
+  event: string;
+  market: string;
+  selection: string;
+  line: number | null;
+  detail: string;
+  detectedAt: string;
+  bookmaker?: string;
+  openingPrice?: number;
+  currentPrice?: number;
+  changePercent?: number;
+  notifiedAt?: string;
+}
+
 export interface OddsProvider {
   readonly name: string;
   fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]>;
@@ -71,6 +87,7 @@ export interface OddsProvider {
 export interface Notifier {
   readonly name: string;
   send(match: OddsMatch): Promise<void>;
+  sendAnalysisSignal?(signal: OddsAnalysisSignal): Promise<void>;
 }
 
 export interface AlertStore {
@@ -85,5 +102,6 @@ export interface RunSummary {
   quotesFresh: number;
   matchesFound: number;
   alertsSent: number;
+  movementAlertsSent: number;
   alertsSuppressed: number;
 }

@@ -1,6 +1,7 @@
 import { JsonAlertStore } from "./alert-store.js";
 import { loadConfig } from "./config.js";
 import { JsonDailyMatchSheet } from "./daily-match-sheet.js";
+import { GoogleSheetsMirror } from "./google-sheets-mirror.js";
 import { errorMessage, logger } from "./logger.js";
 import { OddsMonitor } from "./monitor.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
@@ -14,7 +15,18 @@ try {
     ? new ConsoleNotifier()
     : new TelegramNotifier(config.telegramBotToken!, config.telegramChatId!, config.surpriseOddsThreshold);
   const alertStore = new JsonAlertStore(config.stateFile, config.alertCooldownSeconds);
-  const dailySheet = new JsonDailyMatchSheet(config.dailySheetFile, config.oddsMovementThresholdPercent);
+  const googleSheetsMirror =
+    config.googleSheetsSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey
+      ? new GoogleSheetsMirror({
+          spreadsheetId: config.googleSheetsSpreadsheetId,
+          serviceAccountEmail: config.googleServiceAccountEmail,
+          privateKey: config.googlePrivateKey,
+        })
+      : undefined;
+  const dailySheet = new JsonDailyMatchSheet(config.dailySheetFile, config.oddsMovementThresholdPercent, {
+    mirror: googleSheetsMirror,
+    mirrorSyncMinutes: config.googleSheetsSyncMinutes,
+  });
   const monitor = new OddsMonitor(provider, notifier, alertStore, {
     tolerancePercent: config.tolerancePercent,
     maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
@@ -30,6 +42,7 @@ try {
       tolerancePercent: config.tolerancePercent,
       pollIntervalSeconds: config.pollIntervalSeconds,
       surpriseOddsThreshold: config.surpriseOddsThreshold,
+      googleSheetsEnabled: Boolean(googleSheetsMirror),
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });

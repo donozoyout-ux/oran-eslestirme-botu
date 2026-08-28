@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryAlertStore } from "../src/alert-store.js";
 import { JsonDailyMatchSheet } from "../src/daily-match-sheet.js";
-import type { Notifier, OddsMatch, OddsProvider, OddsQuote } from "../src/domain.js";
+import type { Notifier, OddsAnalysisSignal, OddsMatch, OddsProvider, OddsQuote } from "../src/domain.js";
 import { OddsMonitor } from "../src/monitor.js";
 
 const timestamp = new Date().toISOString();
@@ -50,8 +50,21 @@ class StaticProvider implements OddsProvider {
 class CollectingNotifier implements Notifier {
   readonly name = "collecting";
   readonly sent: OddsMatch[] = [];
+  readonly signals: OddsAnalysisSignal[] = [];
   async send(match: OddsMatch): Promise<void> {
     this.sent.push(match);
+  }
+  async sendAnalysisSignal(signal: OddsAnalysisSignal): Promise<void> {
+    this.signals.push(signal);
+  }
+}
+
+class MovingProvider implements OddsProvider {
+  readonly name = "moving";
+  private calls = 0;
+  async fetchQuotes(): Promise<OddsQuote[]> {
+    this.calls += 1;
+    return [{ ...baseQuote, bookmakerKey: "moving-a", bookmakerName: "Moving A", price: this.calls === 1 ? 2.6 : 2.34 }];
   }
 }
 
@@ -74,5 +87,24 @@ describe("OddsMonitor", () => {
     expect(monitor.getStatus().recentQuotes).toHaveLength(2);
     expect(monitor.getStatus().recentMatches).toHaveLength(1);
     expect(monitor.getStatus().dailySheet.oddsSnapshotCount).toBe(4);
+  });
+
+  it("yuzde 8 oran hareketini Telegram bildiricisine bir kez yollar", async () => {
+    const notifier = new CollectingNotifier();
+    const monitor = new OddsMonitor(new MovingProvider(), notifier, new MemoryAlertStore(600), {
+      tolerancePercent: 2,
+      maxQuoteAgeSeconds: 300,
+      pollIntervalSeconds: 60,
+    }, dailySheet());
+
+    const first = await monitor.runOnce();
+    const second = await monitor.runOnce();
+    const third = await monitor.runOnce();
+
+    expect(first.movementAlertsSent).toBe(0);
+    expect(second.movementAlertsSent).toBe(1);
+    expect(third.movementAlertsSent).toBe(0);
+    expect(notifier.signals).toHaveLength(1);
+    expect(notifier.signals[0]).toMatchObject({ type: "odds_drop", openingPrice: 2.6, currentPrice: 2.34 });
   });
 });

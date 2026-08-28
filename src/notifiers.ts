@@ -1,4 +1,4 @@
-import type { Notifier, OddsMatch } from "./domain.js";
+import type { Notifier, OddsAnalysisSignal, OddsMatch } from "./domain.js";
 import { logger } from "./logger.js";
 
 function escapeHtml(value: string): string {
@@ -143,6 +143,29 @@ export function formatTelegramMessage(match: OddsMatch, surpriseOddsThreshold = 
   return lines.join("\n");
 }
 
+export function formatTelegramAnalysisSignal(signal: OddsAnalysisSignal): string {
+  const dropped = signal.type === "odds_drop";
+  const title = dropped ? "📉 ORAN DÜŞÜŞÜ" : "📈 ORAN YÜKSELİŞİ";
+  const direction = dropped ? "düştü" : "yükseldi";
+  const line = signal.line === null ? "" : ` / Çizgi ${signal.line}`;
+  const change = Math.abs(signal.changePercent ?? 0);
+  return [
+    `${title} — <b>HAREKET SİNYALİ</b>`,
+    "",
+    `⚽ <b>${escapeHtml(signal.event)}</b>`,
+    `📊 <b>Pazar:</b> ${escapeHtml(signal.market)}${escapeHtml(line)}`,
+    `↕️ <b>Seçim:</b> ${escapeHtml(signal.selection)}`,
+    `🏦 <b>Kaynak:</b> ${escapeHtml(signal.bookmaker ?? "Bilinmiyor")}`,
+    "",
+    `• Açılış oranı: <b>${(signal.openingPrice ?? 0).toFixed(2)}</b>`,
+    `• Güncel oran: <b>${(signal.currentPrice ?? 0).toFixed(2)}</b>`,
+    `📐 Değişim: <b>%${change.toFixed(1)} ${direction}</b>`,
+    "",
+    "ℹ️ Oran hareketi piyasa değişimini gösterir; sonuç garantisi değildir.",
+    `<code>${escapeHtml(signal.id)}</code>`,
+  ].join("\n");
+}
+
 export class ConsoleNotifier implements Notifier {
   readonly name = "console";
 
@@ -159,6 +182,20 @@ export class ConsoleNotifier implements Notifier {
       differencePercent: Number(match.relativeDifferencePercent.toFixed(4)),
     });
   }
+
+  async sendAnalysisSignal(signal: OddsAnalysisSignal): Promise<void> {
+    logger.info("DRY RUN oran hareketi bildirimi", {
+      signalId: signal.id,
+      type: signal.type,
+      event: signal.event,
+      market: signal.market,
+      selection: signal.selection,
+      bookmaker: signal.bookmaker,
+      openingPrice: signal.openingPrice,
+      currentPrice: signal.currentPrice,
+      changePercent: signal.changePercent,
+    });
+  }
 }
 
 export class TelegramNotifier implements Notifier {
@@ -171,12 +208,21 @@ export class TelegramNotifier implements Notifier {
   ) {}
 
   async send(match: OddsMatch): Promise<void> {
+    await this.sendMessage(formatTelegramMessage(match, this.surpriseOddsThreshold));
+  }
+
+  async sendAnalysisSignal(signal: OddsAnalysisSignal): Promise<void> {
+    if (signal.type === "close_odds") return;
+    await this.sendMessage(formatTelegramAnalysisSignal(signal));
+  }
+
+  private async sendMessage(text: string): Promise<void> {
     const response = await fetch(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         chat_id: this.chatId,
-        text: formatTelegramMessage(match, this.surpriseOddsThreshold),
+        text,
         parse_mode: "HTML",
         disable_web_page_preview: true,
       }),

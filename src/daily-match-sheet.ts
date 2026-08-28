@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { MatchFixture, OddsMatch, OddsQuote } from "./domain.js";
+import type { MatchFixture, OddsAnalysisSignal, OddsMatch, OddsQuote } from "./domain.js";
 import { errorMessage, logger } from "./logger.js";
 
 export interface OddsHistoryEntry {
@@ -21,15 +21,10 @@ export interface OddsHistoryEntry {
   sourceUpdatedAt: string;
 }
 
-export interface AnalysisSignal {
-  id: string;
-  type: "close_odds" | "odds_drop" | "odds_rise";
-  event: string;
-  market: string;
-  selection: string;
-  line: number | null;
-  detail: string;
-  detectedAt: string;
+export type AnalysisSignal = OddsAnalysisSignal;
+
+export interface DailyRecordResult {
+  pendingMovementSignals: OddsAnalysisSignal[];
 }
 
 export interface DailySheetSnapshot {
@@ -38,10 +33,36 @@ export interface DailySheetSnapshot {
   oddsSnapshotCount: number;
   signalCount: number;
   recentSignals: AnalysisSignal[];
+  googleSheets: {
+    enabled: boolean;
+    name: string | null;
+    url: string | null;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+  };
+}
+
+export interface DailySheetDataset {
+  date: string;
+  fixtures: MatchFixture[];
+  oddsHistory: OddsHistoryEntry[];
+  signals: AnalysisSignal[];
+}
+
+export interface DailySheetMirror {
+  readonly name: string;
+  readonly url?: string;
+  sync(dataset: DailySheetDataset): Promise<void>;
+}
+
+export interface DailyMatchSheetOptions {
+  maxHistoryEntries?: number;
+  mirror?: DailySheetMirror;
+  mirrorSyncMinutes?: number;
 }
 
 interface PersistedDailySheet {
-  version: 1;
+  version: 2;
   date: string;
   fixtures: MatchFixture[];
   oddsHistory: OddsHistoryEntry[];
@@ -83,18 +104,27 @@ function toCsv(rows: unknown[][]): string {
 
 export class JsonDailyMatchSheet {
   private state: PersistedDailySheet;
+  private readonly maxHistoryEntries: number;
+  private readonly mirror?: DailySheetMirror;
+  private readonly mirrorSyncMinutes: number;
+  private lastMirrorAttemptAt: number | null = null;
+  private lastMirrorSuccessAt: string | null = null;
+  private lastMirrorError: string | null = null;
 
   constructor(
     private readonly filePath: string,
     private readonly movementThresholdPercent: number,
-    private readonly maxHistoryEntries = 10_000,
+    options: DailyMatchSheetOptions = {},
   ) {
+    this.maxHistoryEntries = options.maxHistoryEntries ?? 10_000;
+    this.mirror = options.mirror;
+    this.mirrorSyncMinutes = options.mirrorSyncMinutes ?? 15;
     this.state = this.emptyState(new Date());
     this.load();
     this.ensureCurrentDay(new Date());
   }
 
-  async record(fixtures: MatchFixture[], quotes: OddsQuote[], matches: OddsMatch[], now: Date): Promise<void> {
+  async record(fixtures: MatchFixture[], quotes: OddsQuote[], matches: OddsMatch[], now: Date): Promise<DailyRecordResult> {
     this.ensureCurrentDay(now);
     const relevantFixtures = fixtures.filter((fixture) => this.isCurrentFixture(fixture.commenceTime, fixture.phase));
     const relevantQuotes = quotes.filter((quote) => this.isCurrentFixture(quote.commenceTime, quote.phase));
@@ -103,6 +133,19 @@ export class JsonDailyMatchSheet {
     this.mergeFixtures(relevantFixtures, relevantQuotes);
     this.recordQuotes(relevantQuotes, now);
     this.recordMatches(relevantMatches);
+    await this.persist();
+    await this.syncMirrorIfDue(now);
+    return {
+      pendingMovementSignals: this.state.signals.filter(
+        (signal) => signal.type !== "close_odds" && !signal.notifiedAt,
+      ),
+    };
+  }
+
+  async markSignalNotified(signalId: string, now: Date): Promise<void> {
+    const signal = this.state.signals.find((candidate) => candidate.id === signalId);
+    if (!signal) return;
+    signal.notifiedAt = now.toISOString();
     await this.persist();
   }
 
@@ -118,6 +161,13 @@ export class JsonDailyMatchSheet {
       recentSignals: [...this.state.signals]
         .sort((a, b) => Date.parse(b.detectedAt) - Date.parse(a.detectedAt))
         .slice(0, 30),
+      googleSheets: {
+        enabled: Boolean(this.mirror),
+        name: this.mirror?.name ?? null,
+        url: this.mirror?.url ?? null,
+        lastSuccessAt: this.lastMirrorSuccessAt,
+        lastError: this.lastMirrorError,
+      },
     };
   }
 
@@ -246,8 +296,10 @@ export class JsonDailyMatchSheet {
       if (Math.abs(changePercent) < this.movementThresholdPercent) continue;
       const type: AnalysisSignal["type"] = changePercent < 0 ? "odds_drop" : "odds_rise";
       const direction = changePercent < 0 ? "düştü" : "yükseldi";
-      signals.set(`movement:${key}:${type}`, {
-        id: `movement:${key}:${type}`,
+      const signalId = `movement:${key}:${type}`;
+      const existingSignal = signals.get(signalId);
+      const movementSignal: OddsAnalysisSignal = {
+        id: signalId,
         type,
         event: entry.event,
         market: entry.market,
@@ -255,7 +307,13 @@ export class JsonDailyMatchSheet {
         line: entry.line,
         detail: `${entry.bookmaker}: ${opening.price.toFixed(2)} → ${entry.price.toFixed(2)} (%${Math.abs(changePercent).toFixed(1)} ${direction})`,
         detectedAt: now.toISOString(),
-      });
+        bookmaker: entry.bookmaker,
+        openingPrice: opening.price,
+        currentPrice: entry.price,
+        changePercent,
+        notifiedAt: existingSignal?.notifiedAt,
+      };
+      signals.set(signalId, movementSignal);
     }
     if (this.state.oddsHistory.length > this.maxHistoryEntries) {
       this.state.oddsHistory = this.state.oddsHistory.slice(-this.maxHistoryEntries);
@@ -281,7 +339,7 @@ export class JsonDailyMatchSheet {
   }
 
   private emptyState(now: Date): PersistedDailySheet {
-    return { version: 1, date: istanbulDayKey(now), fixtures: [], oddsHistory: [], signals: [] };
+    return { version: 2, date: istanbulDayKey(now), fixtures: [], oddsHistory: [], signals: [] };
   }
 
   private isCurrentFixture(commenceTime: string, phase: "prematch" | "live"): boolean {
@@ -293,12 +351,43 @@ export class JsonDailyMatchSheet {
     if (this.state.date !== istanbulDayKey(now)) this.state = this.emptyState(now);
   }
 
+  private async syncMirrorIfDue(now: Date): Promise<void> {
+    if (!this.mirror) return;
+    if (
+      this.lastMirrorAttemptAt !== null &&
+      now.getTime() - this.lastMirrorAttemptAt < this.mirrorSyncMinutes * 60_000
+    ) {
+      return;
+    }
+    this.lastMirrorAttemptAt = now.getTime();
+    const dataset: DailySheetDataset = {
+      date: this.state.date,
+      fixtures: structuredClone(this.state.fixtures),
+      oddsHistory: structuredClone(this.state.oddsHistory),
+      signals: structuredClone(this.state.signals),
+    };
+    try {
+      await this.mirror.sync(dataset);
+      this.lastMirrorSuccessAt = new Date().toISOString();
+      this.lastMirrorError = null;
+    } catch (error) {
+      this.lastMirrorError = errorMessage(error);
+      logger.warn("Google Sheets senkronizasyonu basarisiz.", { error: this.lastMirrorError });
+    }
+  }
+
   private load(): void {
     try {
       if (!fs.existsSync(this.filePath)) return;
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8")) as Partial<PersistedDailySheet>;
+      const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8")) as {
+        version?: number;
+        date?: unknown;
+        fixtures?: unknown;
+        oddsHistory?: unknown;
+        signals?: unknown;
+      };
       if (
-        parsed.version !== 1 ||
+        (parsed.version !== 1 && parsed.version !== 2) ||
         typeof parsed.date !== "string" ||
         !Array.isArray(parsed.fixtures) ||
         !Array.isArray(parsed.oddsHistory) ||
@@ -306,7 +395,19 @@ export class JsonDailyMatchSheet {
       ) {
         return;
       }
-      this.state = parsed as PersistedDailySheet;
+      const signals = parsed.signals as AnalysisSignal[];
+      this.state = {
+        version: 2,
+        date: parsed.date,
+        fixtures: parsed.fixtures as MatchFixture[],
+        oddsHistory: parsed.oddsHistory as OddsHistoryEntry[],
+        signals:
+          parsed.version === 1
+            ? signals.map((signal) =>
+                signal.type === "close_odds" ? signal : { ...signal, notifiedAt: new Date().toISOString() },
+              )
+            : signals,
+      };
     } catch (error) {
       logger.warn("Gunluk mac tablosu okunamadi; bos tabloyla baslanacak.", { error: errorMessage(error) });
     }

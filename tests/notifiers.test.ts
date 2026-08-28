@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { OddsMatch, OddsQuote } from "../src/domain.js";
-import { describeOddsMatch, formatTelegramMessage } from "../src/notifiers.js";
+import type { OddsAnalysisSignal, OddsMatch, OddsQuote } from "../src/domain.js";
+import { describeOddsMatch, formatTelegramAnalysisSignal, formatTelegramMessage } from "../src/notifiers.js";
 
 function match(overrides: Partial<OddsQuote> = {}, priceA = 2.6, priceB = 2.62): OddsMatch {
   const quoteA: OddsQuote = {
@@ -61,5 +61,28 @@ describe("Telegram bildirim metni", () => {
 
     expect(message).toContain("YAKIN ORAN");
     expect(message).not.toContain("SÜRPRİZ ADAYI");
+  });
+
+  it("oran hareketini acilis, guncel oran ve yuzdeyle aciklar", () => {
+    const signal: OddsAnalysisSignal = {
+      id: "movement-1",
+      type: "odds_drop",
+      event: "A - B",
+      market: "Toplam Gol",
+      selection: "Üst",
+      line: 2.5,
+      detail: "Book A: 2.60 → 2.34",
+      detectedAt: "2026-08-28T12:00:00.000Z",
+      bookmaker: "Book A",
+      openingPrice: 2.6,
+      currentPrice: 2.34,
+      changePercent: -10,
+    };
+
+    const message = formatTelegramAnalysisSignal(signal);
+    expect(message).toContain("ORAN DÜŞÜŞÜ");
+    expect(message).toContain("Açılış oranı: <b>2.60</b>");
+    expect(message).toContain("Güncel oran: <b>2.34</b>");
+    expect(message).toContain("%10.0 düştü");
   });
 });
