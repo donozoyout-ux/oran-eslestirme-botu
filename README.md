@@ -80,11 +80,12 @@ BOOKMAKER_KEYS=bet365,betfair,betfair_ex_eu,pinnacle
 SCRAPER_MAX_MATCHES=2
 SCRAPER_PAGE_TIMEOUT_MS=60000
 SCRAPER_WAIT_MS=2500
+SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK=true
 POLL_INTERVAL_SECONDS=180
 DRY_RUN=true
 ```
 
-Her taramada canli maclara oncelik verilir ve en fazla `SCRAPER_MAX_MATCHES` sayfa okunur. Dusuk frekans varsayilani hedef siteyi gereksiz yukten korur. Canli sayfada standart pazarlar, mac onunde ilk surumde `1X2` taranir.
+Her taramada canli maclara oncelik verilir ve en fazla `SCRAPER_MAX_MATCHES` sayfa okunur. Dusuk frekans varsayilani hedef siteyi gereksiz yukten korur. Canli sayfada standart pazarlar, mac onunde ilk surumde `1X2` taranir. BetExplorer bookmaker listesini sunucu bolgesine gore degistirebilir. Secilen kaynaklar gorunmezse `SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK=true` ile sayfada adi acikca gorunen bookmaker'lar kullanilir; panel gercek kaynak adlarini gosterir.
 
 ## Ucretsiz API demosu
 
@@ -140,6 +141,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `SCRAPER_MAX_MATCHES` | `2` | Bir turda acilacak azami mac sayfasi |
 | `SCRAPER_PAGE_TIMEOUT_MS` | `60000` | Bir scraper sayfasi icin zaman asimi |
 | `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
+| `SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK` | `true` | Secilenler bolgesel olarak yoksa gorunen kaynaklari kullanir |
 | `CHROMIUM_EXECUTABLE_PATH` | bos | Chromium calistirilabilir dosya yolu |
 | `MAX_QUOTE_AGE_SECONDS` | `300` | Bayat veri esigi |
 | `MAX_LIVE_EVENT_AGE_MINUTES` | `180` | Baslangictan sonra canli sayilacak azami sure |

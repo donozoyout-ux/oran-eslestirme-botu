@@ -23,6 +23,8 @@ services:
         value: "60000"
       - key: SCRAPER_WAIT_MS
         value: "2500"
+      - key: SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK
+        value: "true"
       - key: MAX_QUOTE_AGE_SECONDS
         value: "300"
       - key: MAX_LIVE_EVENT_AGE_MINUTES

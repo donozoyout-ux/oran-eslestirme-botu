@@ -14,6 +14,7 @@ export interface BetExplorerScraperOptions {
   maxLiveEventAgeMinutes: number;
   pageTimeoutMs: number;
   waitMs: number;
+  allowVisibleBookmakerFallback: boolean;
   executablePath?: string;
 }
 
@@ -374,7 +375,20 @@ export class BetExplorerScraperProvider implements OddsProvider {
           for (const row of [...snapshot.liveRows, ...snapshot.prematchRows]) {
             if (row.bookmaker) availableBookmakers.add(row.bookmaker);
           }
-          quotes.push(...parseDetailSnapshot(snapshot, candidate, this.options.bookmakerKeys, new Date()));
+          let parsed = parseDetailSnapshot(snapshot, candidate, this.options.bookmakerKeys, new Date());
+          if (parsed.length === 0 && this.options.allowVisibleBookmakerFallback) {
+            const visibleKeys = [...new Set([...snapshot.liveRows, ...snapshot.prematchRows].map((row) => row.bookmaker))]
+              .filter(Boolean)
+              .slice(0, 8);
+            parsed = parseDetailSnapshot(snapshot, candidate, visibleKeys, new Date());
+            if (parsed.length > 0) {
+              logger.warn("Secilen bookmaker gorunmedigi icin sayfadaki acik kaynaklar kullanildi.", {
+                eventId: candidate.eventId,
+                bookmakers: visibleKeys,
+              });
+            }
+          }
+          quotes.push(...parsed);
         } catch (error) {
           const diagnostic = pageDiagnostics.slice(-3).join(" | ");
           const message = `${candidate.eventId}: ${errorMessage(error)}${diagnostic ? ` [${diagnostic}]` : ""}`;

@@ -13,6 +13,7 @@ export function createProvider(config: AppConfig): OddsProvider {
       maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
       pageTimeoutMs: config.scraperPageTimeoutMs,
       waitMs: config.scraperWaitMs,
+      allowVisibleBookmakerFallback: config.scraperAllowVisibleBookmakerFallback,
       executablePath: config.chromiumExecutablePath,
     });
   }
