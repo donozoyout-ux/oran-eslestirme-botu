@@ -339,15 +339,11 @@ export class BetExplorerScraperProvider implements OddsProvider {
     }
 
     const browser = await this.browser();
-    const page = await browser.newPage({ userAgent: USER_AGENT, locale: "tr-TR" });
-    await page.route("**/*", async (route) => {
-      const resourceType = route.request().resourceType();
-      if (["image", "media", "font"].includes(resourceType)) await route.abort();
-      else await route.continue();
-    });
+    const page = await browser.newPage();
 
     const quotes: OddsQuote[] = [];
     const errors: string[] = [];
+    const availableBookmakers = new Set<string>();
     try {
       for (const candidate of candidates) {
         if (signal?.aborted) throw signal.reason;
@@ -364,11 +360,13 @@ export class BetExplorerScraperProvider implements OddsProvider {
           await page
             .waitForSelector(".oddsComparison__liveOdds_row, .oddsComparisonAll__rowBookie", {
               state: "attached",
-              timeout: Math.min(this.options.pageTimeoutMs, 8_000),
-            })
-            .catch(() => undefined);
+              timeout: Math.min(this.options.pageTimeoutMs, 15_000),
+            });
           await page.waitForTimeout(this.options.waitMs);
           const snapshot = await snapshotPage(page);
+          for (const row of [...snapshot.liveRows, ...snapshot.prematchRows]) {
+            if (row.bookmaker) availableBookmakers.add(row.bookmaker);
+          }
           quotes.push(...parseDetailSnapshot(snapshot, candidate, this.options.bookmakerKeys, new Date()));
         } catch (error) {
           const message = `${candidate.eventId}: ${errorMessage(error)}`;
@@ -381,6 +379,14 @@ export class BetExplorerScraperProvider implements OddsProvider {
     }
     if (quotes.length === 0 && errors.length > 0) {
       throw new Error(`BetExplorer oran tablolari okunamadi: ${errors.slice(0, 2).join("; ")}`);
+    }
+    if (quotes.length === 0) {
+      const available = [...availableBookmakers].slice(0, 12).join(", ");
+      throw new Error(
+        available
+          ? `BetExplorer sayfasinda secilen bookmaker bulunamadi. Gorunenler: ${available}`
+          : "BetExplorer dinamik oran satiri dondurmedi.",
+      );
     }
     return quotes;
   }
