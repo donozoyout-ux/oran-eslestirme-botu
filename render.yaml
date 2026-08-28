@@ -31,6 +31,8 @@ services:
         value: "180"
       - key: ALERT_COOLDOWN_SECONDS
         value: "600"
+      - key: SURPRISE_ODDS_THRESHOLD
+        value: "2.5"
       - key: DRY_RUN
         value: "true"
       - key: ODDS_API_KEY

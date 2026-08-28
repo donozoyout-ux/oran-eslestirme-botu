@@ -11,7 +11,7 @@ try {
   const provider = createProvider(config);
   const notifier = config.dryRun
     ? new ConsoleNotifier()
-    : new TelegramNotifier(config.telegramBotToken!, config.telegramChatId!);
+    : new TelegramNotifier(config.telegramBotToken!, config.telegramChatId!, config.surpriseOddsThreshold);
   const alertStore = new JsonAlertStore(config.stateFile, config.alertCooldownSeconds);
   const monitor = new OddsMonitor(provider, notifier, alertStore, {
     tolerancePercent: config.tolerancePercent,
@@ -27,6 +27,7 @@ try {
       notifier: notifier.name,
       tolerancePercent: config.tolerancePercent,
       pollIntervalSeconds: config.pollIntervalSeconds,
+      surpriseOddsThreshold: config.surpriseOddsThreshold,
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });

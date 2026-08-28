@@ -13,6 +13,8 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - Ayni bildirimi belirli sure tekrar gondermeme
 - Uc veya daha fazla kaynak uyustugunda yalnizca en yakin cifti bildirme
 - Telegram bildirimi veya guvenli `DRY_RUN` modu
+- Telegram mesajinda pazar, periyot, cizgi, secim ve bahsin acik Turkce anlami
+- Ortalama oran `2.50` ve uzerindeyse ayarlanabilir `SURPRIZ ADAYI` etiketi
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
 - Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
 - Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
@@ -32,6 +34,8 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 Eski Render servislerinde kalmis `ODDS_PROVIDER=mock` degeri, `NODE_ENV=production` ortaminda otomatik olarak scraper'a yukseltirilir. Uretimde ozellikle demo istenirse `ALLOW_MOCK_IN_PRODUCTION=true` ayarlanabilir.
 
 Nesine, Misli ve Bilyoner bu sunucudan acilan herkese acik sayfada kullanilabilir oran tablosu dondurmedigi icin gercek kaynak olarak etiketlenmez. Onlar icin resmi/lisansli veri erisimi gerekir.
+
+Gol toplaminda `1.5`, `2.5`, `3.5`, `4.5` ve `5.5`; kart toplaminda `1.5`-`5.5`; korner toplaminda `6.5`-`11.5` gibi cizgiler kanonik modelde ve Telegram aciklamasinda desteklenir. Mevcut BetExplorer sayfasi gol Alt/Ust pazarini dondurur; kart ve korner satirlari gorunmedigi icin bu iki pazar ancak bunlari saglayan resmi/lisansli bir veri adaptoru baglandiginda gercek bildirim uretir.
 
 ## Karsilastirma kurali
 
@@ -146,6 +150,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `MAX_QUOTE_AGE_SECONDS` | `300` | Bayat veri esigi |
 | `MAX_LIVE_EVENT_AGE_MINUTES` | `180` | Baslangictan sonra canli sayilacak azami sure |
 | `ALERT_COOLDOWN_SECONDS` | `600` | Ayni eslesme icin tekrar bekleme suresi |
+| `SURPRISE_ODDS_THRESHOLD` | `2.5` | Iki yakin oranin ortalamasi bu degere ulasirsa surpriz adayi etiketi |
 | `DRY_RUN` | `true` | Telegram yerine terminale yazar |
 | `ADMIN_TOKEN` | bos | `/run-once` ucunu acar ve korur |
 | `STATE_FILE` | `./data/alert-state.json` | Bildirim tekillestirme durumu |
