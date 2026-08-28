@@ -73,7 +73,7 @@ export function loadConfig(): AppConfig {
     bookmakerKeys: csv("BOOKMAKER_KEYS", "pinnacle,betfair_ex_eu,betfair,bet365"),
     regions: csv("REGIONS", "eu,uk"),
     scraperMaxMatches: numberValue("SCRAPER_MAX_MATCHES", 2, { min: 1, max: 10 }),
-    scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 25_000, { min: 5_000, max: 60_000 }),
+    scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 60_000, { min: 5_000, max: 60_000 }),
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
     chromiumExecutablePath: optional("CHROMIUM_EXECUTABLE_PATH"),
     tolerancePercent: numberValue("ODDS_TOLERANCE_PERCENT", 2, { min: 0, max: 100 }),

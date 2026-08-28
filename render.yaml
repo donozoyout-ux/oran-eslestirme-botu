@@ -20,7 +20,7 @@ services:
       - key: SCRAPER_MAX_MATCHES
         value: "2"
       - key: SCRAPER_PAGE_TIMEOUT_MS
-        value: "25000"
+        value: "60000"
       - key: SCRAPER_WAIT_MS
         value: "2500"
       - key: MAX_QUOTE_AGE_SECONDS

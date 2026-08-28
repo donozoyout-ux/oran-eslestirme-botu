@@ -78,7 +78,7 @@ Docker veya sistemde kurulu Chromium gerektirir. Render yapilandirmasi Chromium'
 ODDS_PROVIDER=betexplorer_scraper
 BOOKMAKER_KEYS=bet365,betfair,betfair_ex_eu,pinnacle
 SCRAPER_MAX_MATCHES=2
-SCRAPER_PAGE_TIMEOUT_MS=25000
+SCRAPER_PAGE_TIMEOUT_MS=60000
 SCRAPER_WAIT_MS=2500
 POLL_INTERVAL_SECONDS=180
 DRY_RUN=true
@@ -138,7 +138,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `ODDS_TOLERANCE_PERCENT` | `2` | Bildirim icin azami goreli fark |
 | `POLL_INTERVAL_SECONDS` | `60` | Tarama araligi; en az 10 saniye |
 | `SCRAPER_MAX_MATCHES` | `2` | Bir turda acilacak azami mac sayfasi |
-| `SCRAPER_PAGE_TIMEOUT_MS` | `25000` | Bir scraper sayfasi icin zaman asimi |
+| `SCRAPER_PAGE_TIMEOUT_MS` | `60000` | Bir scraper sayfasi icin zaman asimi |
 | `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
 | `CHROMIUM_EXECUTABLE_PATH` | bos | Chromium calistirilabilir dosya yolu |
 | `MAX_QUOTE_AGE_SECONDS` | `300` | Bayat veri esigi |

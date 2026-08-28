@@ -344,9 +344,16 @@ export class BetExplorerScraperProvider implements OddsProvider {
     const quotes: OddsQuote[] = [];
     const errors: string[] = [];
     const availableBookmakers = new Set<string>();
+    const pageDiagnostics: string[] = [];
+    page.on("pageerror", (error) => pageDiagnostics.push(`js: ${error.message.slice(0, 180)}`));
+    page.on("requestfailed", (request) => {
+      const failure = request.failure()?.errorText;
+      if (failure) pageDiagnostics.push(`${request.resourceType()}: ${failure.slice(0, 120)}`);
+    });
     try {
       for (const candidate of candidates) {
         if (signal?.aborted) throw signal.reason;
+        pageDiagnostics.length = 0;
         try {
           await page.goto(candidate.url, { waitUntil: "commit", timeout: this.options.pageTimeoutMs });
           const currentUrl = new URL(page.url());
@@ -369,7 +376,8 @@ export class BetExplorerScraperProvider implements OddsProvider {
           }
           quotes.push(...parseDetailSnapshot(snapshot, candidate, this.options.bookmakerKeys, new Date()));
         } catch (error) {
-          const message = `${candidate.eventId}: ${errorMessage(error)}`;
+          const diagnostic = pageDiagnostics.slice(-3).join(" | ");
+          const message = `${candidate.eventId}: ${errorMessage(error)}${diagnostic ? ` [${diagnostic}]` : ""}`;
           errors.push(message);
           logger.warn("BetExplorer mac sayfasi okunamadi.", { eventId: candidate.eventId, error: errorMessage(error) });
         }
