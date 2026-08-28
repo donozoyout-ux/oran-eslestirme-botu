@@ -37,6 +37,19 @@ export interface OddsQuote {
   sourceUrl?: string;
 }
 
+export interface MatchFixture {
+  provider: string;
+  sourceEventId: string;
+  leagueName: string;
+  homeTeam: string;
+  awayTeam: string;
+  commenceTime: string;
+  phase: EventPhase;
+  sourceUrl?: string;
+  lastOddsCheckAt?: string;
+  nextOddsCheckAt?: string;
+}
+
 export interface OddsMatch {
   id: string;
   eventKey: string;
@@ -51,6 +64,7 @@ export interface OddsMatch {
 export interface OddsProvider {
   readonly name: string;
   fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]>;
+  getLastFixtures?(): MatchFixture[];
   close?(): Promise<void>;
 }
 

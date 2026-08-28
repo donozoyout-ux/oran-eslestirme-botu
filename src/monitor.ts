@@ -1,5 +1,6 @@
 import type { AlertStore, Notifier, OddsProvider, RunSummary } from "./domain.js";
 import { findOddsMatches } from "./comparison-engine.js";
+import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { errorMessage, logger } from "./logger.js";
 
 export interface MonitorOptions {
@@ -40,6 +41,7 @@ export interface MonitorStatus {
     differencePercent: number;
     detectedAt: string;
   }>;
+  dailySheet: DailySheetSnapshot;
   totals: {
     runs: number;
     alertsSent: number;
@@ -58,6 +60,7 @@ export class OddsMonitor {
     private readonly notifier: Notifier,
     private readonly alertStore: AlertStore,
     private readonly options: MonitorOptions,
+    private readonly dailySheet: JsonDailyMatchSheet,
   ) {
     this.statusValue = {
       provider: provider.name,
@@ -70,6 +73,7 @@ export class OddsMonitor {
       lastRun: null,
       recentQuotes: [],
       recentMatches: [],
+      dailySheet: dailySheet.getSnapshot(),
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     };
   }
@@ -86,7 +90,16 @@ export class OddsMonitor {
   }
 
   getStatus(): MonitorStatus {
+    this.statusValue.dailySheet = this.dailySheet.getSnapshot();
     return JSON.parse(JSON.stringify(this.statusValue)) as MonitorStatus;
+  }
+
+  getDailyFixturesCsv(): string {
+    return this.dailySheet.fixturesCsv();
+  }
+
+  getOddsHistoryCsv(): string {
+    return this.dailySheet.oddsHistoryCsv();
   }
 
   runOnce(): Promise<RunSummary> {
@@ -122,6 +135,18 @@ export class OddsMonitor {
         },
         comparisonTime,
       );
+      try {
+        await this.dailySheet.record(
+          this.provider.getLastFixtures?.() ?? [],
+          comparison.freshQuotes,
+          comparison.matches,
+          comparisonTime,
+        );
+        this.statusValue.dailySheet = this.dailySheet.getSnapshot();
+      } catch (error) {
+        this.statusValue.totals.errors += 1;
+        logger.warn("Gunluk mac tablosu kaydedilemedi.", { error: errorMessage(error) });
+      }
       let alertsSent = 0;
       let alertsSuppressed = 0;
 

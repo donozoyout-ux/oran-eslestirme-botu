@@ -15,6 +15,10 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - Telegram bildirimi veya guvenli `DRY_RUN` modu
 - Telegram mesajinda pazar, periyot, cizgi, secim ve bahsin acik Turkce anlami
 - Ortalama oran `2.50` ve uzerindeyse ayarlanabilir `SURPRIZ ADAYI` etiketi
+- Gun basinda fiksturu ayiran ve panelde `Gunun Maclari` tablosuna kaydeden planlayici
+- Maca 6 saatten fazla varken bekleyen; 6 saat, 1 saat, son 15 dakika ve canli icin farkli tarama araliklari
+- Acilis oranina gore varsayilan `%8` dusus/yukselis sinyali ve gunluk oran gecmisi
+- Gunluk mac listesini ve oran gecmisini Google Sheets/Excel uyumlu CSV olarak indirme
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
 - Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
 - Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
@@ -91,6 +95,10 @@ DRY_RUN=true
 
 Her taramada canli maclara oncelik verilir ve en fazla `SCRAPER_MAX_MATCHES` sayfa okunur. Dusuk frekans varsayilani hedef siteyi gereksiz yukten korur. Canli sayfada standart pazarlar, mac onunde ilk surumde `1X2` taranir. BetExplorer bookmaker listesini sunucu bolgesine gore degistirebilir. Secilen kaynaklar gorunmezse `SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK=true` ile sayfada adi acikca gorunen bookmaker'lar kullanilir; panel gercek kaynak adlarini gosterir.
 
+Liste sayfasi her dongude hafif olarak okunur ve o gunun maclari saklanir. Oran detay sayfalari ise yalnizca zamanlama kurali geldiginde acilir: varsayilan olarak maca 6 saatten fazla varsa beklenir, 6-1 saat arasi saatte bir, 60-15 dakika arasi 15 dakikada bir, son 15 dakikada 5 dakikada bir ve canlida 3 dakikada bir kontrol edilir. Bir turdaki sayfa siniri dolarsa zamani gelen diger maclar sonraki dongulerde sirayla taranir.
+
+Paneldeki `Maclari indir` ve `Oran gecmisini indir` baglantilari CSV uretir. Bu dosyalar dogrudan Google Sheets veya Excel'e aktarilabilir. Google Sheets'e API ile otomatik yazma icin ayrica bir Google servis hesabi ve hedef Sheet kimligi gerekir; ana tarama bu baglanti olmadan da calisir.
+
 ## Ucretsiz API demosu
 
 1. [The Odds API](https://the-odds-api.com/) uzerinden bir API anahtari alin.
@@ -147,13 +155,20 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
 | `SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK` | `true` | Secilenler bolgesel olarak yoksa gorunen kaynaklari kullanir |
 | `CHROMIUM_EXECUTABLE_PATH` | bos | Chromium calistirilabilir dosya yolu |
+| `PREMATCH_TRACK_HOURS` | `6` | Mac oncesi detayli oran takibinin baslayacagi saat |
+| `PREMATCH_FAR_POLL_MINUTES` | `60` | 6-1 saat arasi kontrol araligi |
+| `PREMATCH_NEAR_POLL_MINUTES` | `15` | 60-15 dakika arasi kontrol araligi |
+| `PREMATCH_FINAL_POLL_MINUTES` | `5` | Son 15 dakika kontrol araligi |
+| `LIVE_POLL_MINUTES` | `3` | Canli mac kontrol araligi |
 | `MAX_QUOTE_AGE_SECONDS` | `300` | Bayat veri esigi |
 | `MAX_LIVE_EVENT_AGE_MINUTES` | `180` | Baslangictan sonra canli sayilacak azami sure |
 | `ALERT_COOLDOWN_SECONDS` | `600` | Ayni eslesme icin tekrar bekleme suresi |
 | `SURPRISE_ODDS_THRESHOLD` | `2.5` | Iki yakin oranin ortalamasi bu degere ulasirsa surpriz adayi etiketi |
+| `ODDS_MOVEMENT_THRESHOLD_PERCENT` | `8` | Acilis oranina gore analiz sinyali uretecek degisim |
 | `DRY_RUN` | `true` | Telegram yerine terminale yazar |
 | `ADMIN_TOKEN` | bos | `/run-once` ucunu acar ve korur |
 | `STATE_FILE` | `./data/alert-state.json` | Bildirim tekillestirme durumu |
+| `DAILY_SHEET_FILE` | `./data/daily-match-sheet.json` | Gunluk fikstur, oran gecmisi ve sinyal tablosu |
 
 ## Render'a dagitim
 

@@ -14,6 +14,11 @@ export function createProvider(config: AppConfig): OddsProvider {
       pageTimeoutMs: config.scraperPageTimeoutMs,
       waitMs: config.scraperWaitMs,
       allowVisibleBookmakerFallback: config.scraperAllowVisibleBookmakerFallback,
+      prematchTrackHours: config.prematchTrackHours,
+      prematchFarPollMinutes: config.prematchFarPollMinutes,
+      prematchNearPollMinutes: config.prematchNearPollMinutes,
+      prematchFinalPollMinutes: config.prematchFinalPollMinutes,
+      livePollMinutes: config.livePollMinutes,
       executablePath: config.chromiumExecutablePath,
     });
   }

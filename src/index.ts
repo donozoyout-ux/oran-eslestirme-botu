@@ -1,5 +1,6 @@
 import { JsonAlertStore } from "./alert-store.js";
 import { loadConfig } from "./config.js";
+import { JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { errorMessage, logger } from "./logger.js";
 import { OddsMonitor } from "./monitor.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
@@ -13,11 +14,12 @@ try {
     ? new ConsoleNotifier()
     : new TelegramNotifier(config.telegramBotToken!, config.telegramChatId!, config.surpriseOddsThreshold);
   const alertStore = new JsonAlertStore(config.stateFile, config.alertCooldownSeconds);
+  const dailySheet = new JsonDailyMatchSheet(config.dailySheetFile, config.oddsMovementThresholdPercent);
   const monitor = new OddsMonitor(provider, notifier, alertStore, {
     tolerancePercent: config.tolerancePercent,
     maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
     pollIntervalSeconds: config.pollIntervalSeconds,
-  });
+  }, dailySheet);
   const server = createServer(monitor, config.adminToken);
 
   server.listen(config.port, "0.0.0.0", () => {

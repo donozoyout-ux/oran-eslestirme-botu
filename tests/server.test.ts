@@ -20,6 +20,9 @@ function monitorStub(): OddsMonitor {
       lastErrorAt: null,
       lastError: null,
       lastRun: null,
+      recentQuotes: [],
+      recentMatches: [],
+      dailySheet: { date: "2026-08-28", fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [] },
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     }),
     runOnce: async () => ({
@@ -31,6 +34,8 @@ function monitorStub(): OddsMonitor {
       alertsSent: 0,
       alertsSuppressed: 0,
     }),
+    getDailyFixturesCsv: () => "\uFEFFTarih\r\n",
+    getOddsHistoryCsv: () => "\uFEFFOran\r\n",
   } as OddsMonitor;
 }
 
@@ -60,5 +65,15 @@ describe("dashboard", () => {
     const response = await fetch(`${baseUrl}/health`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true, service: "oran-eslestirme-botu" });
+  });
+
+  it("gunluk mac ve oran gecmisi CSV dosyalarini sunar", async () => {
+    const baseUrl = await startServer();
+    const fixtures = await fetch(`${baseUrl}/daily-matches.csv`);
+    const history = await fetch(`${baseUrl}/odds-history.csv`);
+
+    expect(fixtures.headers.get("content-type")).toContain("text/csv");
+    expect(fixtures.headers.get("content-disposition")).toContain("gunun-maclari.csv");
+    expect(history.status).toBe(200);
   });
 });

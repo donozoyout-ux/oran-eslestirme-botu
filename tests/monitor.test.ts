@@ -1,9 +1,24 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { MemoryAlertStore } from "../src/alert-store.js";
+import { JsonDailyMatchSheet } from "../src/daily-match-sheet.js";
 import type { Notifier, OddsMatch, OddsProvider, OddsQuote } from "../src/domain.js";
 import { OddsMonitor } from "../src/monitor.js";
 
 const timestamp = new Date().toISOString();
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+});
+
+function dailySheet(): JsonDailyMatchSheet {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "odds-monitor-"));
+  temporaryDirectories.push(directory);
+  return new JsonDailyMatchSheet(path.join(directory, "daily.json"), 8);
+}
 const baseQuote: OddsQuote = {
   provider: "test",
   bookmakerKey: "a",
@@ -47,7 +62,7 @@ describe("OddsMonitor", () => {
       tolerancePercent: 2,
       maxQuoteAgeSeconds: 300,
       pollIntervalSeconds: 60,
-    });
+    }, dailySheet());
 
     const first = await monitor.runOnce();
     const second = await monitor.runOnce();
@@ -58,5 +73,6 @@ describe("OddsMonitor", () => {
     expect(notifier.sent).toHaveLength(1);
     expect(monitor.getStatus().recentQuotes).toHaveLength(2);
     expect(monitor.getStatus().recentMatches).toHaveLength(1);
+    expect(monitor.getStatus().dailySheet.oddsSnapshotCount).toBe(4);
   });
 });

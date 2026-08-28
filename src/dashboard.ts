@@ -43,7 +43,7 @@ export const dashboardHtml = String.raw`<!doctype html>
     .notice { display: none; padding: 14px 16px; border: 1px solid rgba(255, 207, 112, .25); border-radius: 14px; background: rgba(255, 207, 112, .08); color: #ffe4a7; font-size: 13px; line-height: 1.55; }
     .notice.show { display: block; }
     .notice.error { border-color: rgba(255, 123, 135, .28); background: rgba(255, 123, 135, .08); color: #ffc1c7; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
     .card, .section { border: 1px solid var(--line); background: var(--panel); box-shadow: 0 18px 48px rgba(0, 0, 0, .18); backdrop-filter: blur(16px); }
     .card { min-height: 152px; padding: 21px; border-radius: 18px; }
     .label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
@@ -53,6 +53,9 @@ export const dashboardHtml = String.raw`<!doctype html>
     .lower { display: grid; grid-template-columns: 1.35fr .65fr; gap: 14px; margin-top: 14px; }
     .section { border-radius: 18px; overflow: hidden; }
     .section-head { display: flex; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
+    .section-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .download { color: var(--cyan); font-size: 12px; font-weight: 750; text-decoration: none; }
+    .download:hover { text-decoration: underline; }
     h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
     .updated { color: var(--muted); font-size: 12px; }
     table { width: 100%; border-collapse: collapse; }
@@ -76,7 +79,7 @@ export const dashboardHtml = String.raw`<!doctype html>
       <div>
         <p class="eyebrow">Canlı İzleme Paneli</p>
         <h1>Oran Eşleştirme Botu</h1>
-        <p class="intro">Futbol oranlarını tarar, aynı maç ve pazardaki oranlar birbirine %2 yaklaştığında bildirime hazırlar.</p>
+        <p class="intro">Günün maçlarını planlar, maç saatine göre oran geçmişini toplar ve aynı pazardaki oranlar birbirine %2 yaklaştığında Telegram bildirimi gönderir.</p>
       </div>
       <div id="live" class="live"><span class="dot"></span><span id="liveText">Bağlanıyor</span></div>
     </header>
@@ -92,6 +95,29 @@ export const dashboardHtml = String.raw`<!doctype html>
       <article class="card"><div class="label">Taranan Oran <span class="icon">↻</span></div><div id="quotes" class="metric">—</div><div class="sub">Son taramadaki güncel oranlar</div></article>
       <article class="card"><div class="label">Yakın Eşleşme <span class="icon">≈</span></div><div id="matches" class="metric">—</div><div class="sub">%2 sınırının içindeki pazarlar</div></article>
       <article class="card"><div class="label">Bildirim <span class="icon">↗</span></div><div id="alertsSent" class="metric">—</div><div id="notifierSub" class="sub">Toplam gönderilen</div></article>
+      <article class="card"><div class="label">Günün Maçı <span class="icon">▦</span></div><div id="fixtureCount" class="metric">—</div><div class="sub">Bugünkü planlanan karşılaşmalar</div></article>
+      <article class="card"><div class="label">Analiz Sinyali <span class="icon">⌁</span></div><div id="signalCount" class="metric">—</div><div class="sub">Yakın oran ve oran hareketi</div></article>
+    </section>
+    <section class="section" style="margin-top:14px">
+      <div class="section-head">
+        <h2>Günün maçları ve kontrol planı</h2>
+        <div class="section-actions"><span id="sheetDate" class="updated">—</span><a class="download" href="/daily-matches.csv">Maçları indir</a><a class="download" href="/odds-history.csv">Oran geçmişini indir</a></div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Maç</th><th>Lig</th><th>Başlangıç</th><th>Durum</th><th>Son kontrol</th><th>Sonraki kontrol</th></tr></thead>
+          <tbody id="dailyFixtures"><tr><td colspan="6">Günün maç listesi hazırlanıyor.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="section" style="margin-top:14px">
+      <div class="section-head"><h2>Son analiz sinyalleri</h2><span class="updated">%2 yakın oran ve %8 hareket</span></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Maç</th><th>Pazar / Seçim</th><th>Sinyal</th><th>Açıklama</th><th>Saat</th></tr></thead>
+          <tbody id="recentSignals"><tr><td colspan="5">Henüz analiz sinyali oluşmadı.</td></tr></tbody>
+        </table>
+      </div>
     </section>
     <section class="section" style="margin-top:14px">
       <div class="section-head"><h2>Son okunan gerçek oranlar</h2><span class="updated">En fazla 40 kayıt</span></div>
@@ -146,6 +172,7 @@ export const dashboardHtml = String.raw`<!doctype html>
       const mock = data.provider === 'mock';
       const scraper = data.provider === 'betexplorer_scraper';
       const telegram = data.notifier === 'telegram';
+      const sheet = data.dailySheet || { fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [] };
       el('live').className = 'live ' + (data.lastError ? 'bad' : 'ok');
       el('liveText').textContent = data.lastError ? 'Hata var' : 'Sistem çalışıyor';
       el('provider').textContent = mock ? 'Demo' : (scraper ? 'Web Tarama' : 'Gerçek API');
@@ -153,6 +180,9 @@ export const dashboardHtml = String.raw`<!doctype html>
       el('quotes').textContent = number(run.quotesFresh);
       el('matches').textContent = number(run.matchesFound);
       el('alertsSent').textContent = number(data.totals && data.totals.alertsSent);
+      el('fixtureCount').textContent = number(sheet.fixtures && sheet.fixtures.length);
+      el('signalCount').textContent = number(sheet.signalCount);
+      el('sheetDate').textContent = sheet.date ? 'Türkiye günü: ' + sheet.date : '—';
       el('notifierSub').textContent = telegram ? 'Telegram aktif' : 'Telegram kapalı';
       el('fetched').textContent = number(run.quotesFetched);
       el('fresh').textContent = number(run.quotesFresh);
@@ -167,6 +197,64 @@ export const dashboardHtml = String.raw`<!doctype html>
       el('telegramNotice').classList.toggle('show', !telegram);
       el('errorNotice').classList.toggle('show', Boolean(data.lastError));
       el('errorNotice').textContent = data.lastError ? 'Son hata: ' + data.lastError : '';
+      const fixturesBody = el('dailyFixtures');
+      fixturesBody.replaceChildren();
+      const fixtures = Array.isArray(sheet.fixtures) ? sheet.fixtures : [];
+      if (fixtures.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.textContent = 'Bugün için listelenmiş maç bulunmadı veya liste taraması sürüyor.';
+        row.appendChild(cell);
+        fixturesBody.appendChild(row);
+      } else {
+        for (const fixture of fixtures.slice(0, 100)) {
+          const row = document.createElement('tr');
+          const values = [
+            fixture.homeTeam + ' - ' + fixture.awayTeam,
+            fixture.leagueName,
+            date(fixture.commenceTime),
+            fixture.phase === 'live' ? 'CANLI / BAŞLADI' : 'MAÇ ÖNÜ',
+            date(fixture.lastOddsCheckAt),
+            date(fixture.nextOddsCheckAt),
+          ];
+          for (const value of values) {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            row.appendChild(cell);
+          }
+          fixturesBody.appendChild(row);
+        }
+      }
+      const signalsBody = el('recentSignals');
+      signalsBody.replaceChildren();
+      const signals = Array.isArray(sheet.recentSignals) ? sheet.recentSignals : [];
+      if (signals.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5;
+        cell.textContent = 'Henüz yakın oran veya belirgin oran hareketi bulunmadı.';
+        row.appendChild(cell);
+        signalsBody.appendChild(row);
+      } else {
+        for (const signal of signals) {
+          const row = document.createElement('tr');
+          const signalName = signal.type === 'close_odds' ? 'YAKIN ORAN' : (signal.type === 'odds_drop' ? 'ORAN DÜŞTÜ' : 'ORAN YÜKSELDİ');
+          const values = [
+            signal.event,
+            signal.market + ' / ' + signal.selection + (signal.line === null ? '' : ' (' + signal.line + ')'),
+            signalName,
+            signal.detail,
+            date(signal.detectedAt),
+          ];
+          for (const value of values) {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            row.appendChild(cell);
+          }
+          signalsBody.appendChild(row);
+        }
+      }
       const quotesBody = el('recentQuotes');
       quotesBody.replaceChildren();
       const recentQuotes = Array.isArray(data.recentQuotes) ? data.recentQuotes : [];

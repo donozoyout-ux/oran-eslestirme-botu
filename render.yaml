@@ -25,6 +25,16 @@ services:
         value: "2500"
       - key: SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK
         value: "true"
+      - key: PREMATCH_TRACK_HOURS
+        value: "6"
+      - key: PREMATCH_FAR_POLL_MINUTES
+        value: "60"
+      - key: PREMATCH_NEAR_POLL_MINUTES
+        value: "15"
+      - key: PREMATCH_FINAL_POLL_MINUTES
+        value: "5"
+      - key: LIVE_POLL_MINUTES
+        value: "3"
       - key: MAX_QUOTE_AGE_SECONDS
         value: "300"
       - key: MAX_LIVE_EVENT_AGE_MINUTES
@@ -33,6 +43,8 @@ services:
         value: "600"
       - key: SURPRISE_ODDS_THRESHOLD
         value: "2.5"
+      - key: ODDS_MOVEMENT_THRESHOLD_PERCENT
+        value: "8"
       - key: DRY_RUN
         value: "true"
       - key: ODDS_API_KEY

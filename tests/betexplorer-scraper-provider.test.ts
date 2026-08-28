@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalBookmaker,
   parseCandidateIndexHtml,
+  parseFixtureIndexHtml,
   parseDetailSnapshot,
+  scheduledIntervalMinutes,
+  selectScheduledCandidates,
   type BetExplorerCandidate,
   type BetExplorerPageSnapshot,
 } from "../src/providers/betexplorer-scraper-provider.js";
@@ -16,6 +19,9 @@ function candidate(phaseHint: "prematch" | "live"): BetExplorerCandidate {
     commenceTime: "2026-08-28T12:00:00.000Z",
     phaseHint,
     deltaMinutes: phaseHint === "live" ? -10 : 120,
+    homeTeam: "Crystal Palace",
+    awayTeam: "Manchester City",
+    leagueName: "England · Premier League",
   };
 }
 
@@ -32,6 +38,32 @@ describe("BetExplorer scraper", () => {
     expect(result).toHaveLength(2);
     expect(result.map((item) => item.phaseHint)).toEqual(["live", "prematch"]);
     expect(result[0]?.commenceTime).toBe("2026-08-28T09:51:00.000Z");
+    expect(result[0]).toMatchObject({ homeTeam: "A", awayTeam: "B", leagueName: "Turkey · Super Lig" });
+  });
+
+  it("tum gunluk fiksturu ayirir ve yalniz zamani gelen maclari secer", () => {
+    const html = `
+      <ul class="table-main__matchInfo" data-live="FAR00001" data-dt="29,8,2026,01,00" data-dt-now="28,8,2026,12,00">
+        <a data-live-cell="matchlink" href="/football/spain/la-liga/a-b/FAR00001/">A - B</a>
+      </ul>
+      <ul class="table-main__matchInfo" data-live="NEAR0001" data-dt="28,8,2026,13,00" data-dt-now="28,8,2026,12,00">
+        <a data-live-cell="matchlink" href="/football/italy/serie-a/c-d/NEAR0001/">C - D</a>
+      </ul>`;
+    const fixtures = parseFixtureIndexHtml(html, now, { maxLiveEventAgeMinutes: 180 });
+    const options = {
+      maxMatches: 2,
+      prematchTrackHours: 6,
+      prematchFarPollMinutes: 60,
+      prematchNearPollMinutes: 15,
+      prematchFinalPollMinutes: 5,
+      livePollMinutes: 3,
+    };
+
+    expect(fixtures).toHaveLength(2);
+    expect(scheduledIntervalMinutes(fixtures[0]!, options)).toBeNull();
+    expect(selectScheduledCandidates(fixtures, new Map(), now, options).map((item) => item.eventId)).toEqual([
+      "NEAR0001",
+    ]);
   });
 
   it("mac onu 1X2 oranlarini bookmaker bazinda donusturur", () => {

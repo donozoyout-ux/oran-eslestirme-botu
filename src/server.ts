@@ -23,6 +23,16 @@ function sendDashboard(response: ServerResponse): void {
   response.end(dashboardHtml);
 }
 
+function sendCsv(response: ServerResponse, filename: string, content: string): void {
+  response.writeHead(200, {
+    "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="${filename}"`,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+  });
+  response.end(content);
+}
+
 function bearerToken(request: IncomingMessage): string | null {
   const header = request.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
@@ -52,6 +62,16 @@ export function createServer(monitor: OddsMonitor, adminToken?: string): http.Se
 
     if (method === "GET" && url.pathname === "/status") {
       sendJson(response, 200, monitor.getStatus());
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/daily-matches.csv") {
+      sendCsv(response, "gunun-maclari.csv", monitor.getDailyFixturesCsv());
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/odds-history.csv") {
+      sendCsv(response, "oran-gecmisi.csv", monitor.getOddsHistoryCsv());
       return;
     }
 

@@ -1,6 +1,6 @@
 import { load } from "cheerio";
 import { chromium, type Browser, type Page } from "playwright-core";
-import type { MarketKey, OddsProvider, OddsQuote } from "../domain.js";
+import type { MarketKey, MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
 import { errorMessage, logger } from "../logger.js";
 
 const BASE_URL = "https://www.betexplorer.com";
@@ -15,6 +15,11 @@ export interface BetExplorerScraperOptions {
   pageTimeoutMs: number;
   waitMs: number;
   allowVisibleBookmakerFallback: boolean;
+  prematchTrackHours: number;
+  prematchFarPollMinutes: number;
+  prematchNearPollMinutes: number;
+  prematchFinalPollMinutes: number;
+  livePollMinutes: number;
   executablePath?: string;
 }
 
@@ -24,6 +29,9 @@ export interface BetExplorerCandidate {
   commenceTime: string;
   phaseHint: "prematch" | "live";
   deltaMinutes: number;
+  homeTeam: string;
+  awayTeam: string;
+  leagueName: string;
 }
 
 interface RawPrematchOdd {
@@ -62,10 +70,27 @@ function siteTime(raw: string | undefined): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-export function parseCandidateIndexHtml(
+function titleFromSlug(value: string): string {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function teamsFromText(value: string): { homeTeam: string; awayTeam: string } {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const parts = normalized.split(/\s+[–—-]\s+/);
+  if (parts.length >= 2) {
+    return { homeTeam: parts[0]?.trim() || "Ev Sahibi", awayTeam: parts.slice(1).join(" - ").trim() || "Deplasman" };
+  }
+  return { homeTeam: normalized || "Ev Sahibi", awayTeam: "Deplasman" };
+}
+
+export function parseFixtureIndexHtml(
   html: string,
   now: Date,
-  options: Pick<BetExplorerScraperOptions, "maxMatches" | "maxLiveEventAgeMinutes">,
+  options: Pick<BetExplorerScraperOptions, "maxLiveEventAgeMinutes">,
 ): BetExplorerCandidate[] {
   const $ = load(html);
   const firstRow = $(".table-main__matchInfo[data-dt-now]").first();
@@ -78,7 +103,8 @@ export function parseCandidateIndexHtml(
   $(".table-main__matchInfo[data-live][data-dt]").each((_index, element) => {
     const row = $(element);
     const eventId = row.attr("data-live")?.trim();
-    const rawHref = row.find('a[data-live-cell="matchlink"]').first().attr("href")?.trim();
+    const matchLink = row.find('a[data-live-cell="matchlink"]').first();
+    const rawHref = matchLink.attr("href")?.trim();
     const eventTime = siteTime(row.attr("data-dt"));
     if (!eventId || !/^[A-Za-z0-9]{8}$/.test(eventId) || !rawHref || eventTime === null) return;
     if (!/^\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[A-Za-z0-9]{8}\/$/.test(rawHref)) return;
@@ -87,14 +113,23 @@ export function parseCandidateIndexHtml(
 
     const deltaMinutes = (eventTime - siteNow) / 60_000;
     if (deltaMinutes < -options.maxLiveEventAgeMinutes) return;
+    const pathParts = rawHref.split("/").filter(Boolean);
+    const teams = teamsFromText(matchLink.text());
     candidates.push({
       eventId,
       url: new URL(rawHref, BASE_URL).toString(),
       commenceTime: new Date(alignedNowMs + deltaMinutes * 60_000).toISOString(),
       phaseHint: deltaMinutes <= 0 ? "live" : "prematch",
       deltaMinutes,
+      homeTeam: teams.homeTeam,
+      awayTeam: teams.awayTeam,
+      leagueName: `${titleFromSlug(pathParts[1] ?? "football")} · ${titleFromSlug(pathParts[2] ?? "league")}`,
     });
   });
+  return candidates;
+}
+
+function selectBalancedCandidates(candidates: BetExplorerCandidate[], maxMatches: number): BetExplorerCandidate[] {
 
   const live = candidates
     .filter((candidate) => candidate.phaseHint === "live")
@@ -102,18 +137,81 @@ export function parseCandidateIndexHtml(
   const upcoming = candidates
     .filter((candidate) => candidate.phaseHint === "prematch")
     .sort((a, b) => a.deltaMinutes - b.deltaMinutes);
-  const liveTarget = Math.ceil(options.maxMatches / 2);
-  const selected = [...live.slice(0, liveTarget), ...upcoming.slice(0, options.maxMatches - liveTarget)];
+  const liveTarget = Math.ceil(maxMatches / 2);
+  const selected = [...live.slice(0, liveTarget), ...upcoming.slice(0, maxMatches - liveTarget)];
   const selectedIds = new Set(selected.map((candidate) => candidate.eventId));
-  const remainder = [...live.slice(liveTarget), ...upcoming.slice(options.maxMatches - liveTarget)];
+  const remainder = [...live.slice(liveTarget), ...upcoming.slice(maxMatches - liveTarget)];
   for (const candidate of remainder) {
-    if (selected.length >= options.maxMatches) break;
+    if (selected.length >= maxMatches) break;
     if (!selectedIds.has(candidate.eventId)) {
       selected.push(candidate);
       selectedIds.add(candidate.eventId);
     }
   }
   return selected;
+}
+
+export function parseCandidateIndexHtml(
+  html: string,
+  now: Date,
+  options: Pick<BetExplorerScraperOptions, "maxMatches" | "maxLiveEventAgeMinutes">,
+): BetExplorerCandidate[] {
+  return selectBalancedCandidates(parseFixtureIndexHtml(html, now, options), options.maxMatches);
+}
+
+type ScheduleOptions = Pick<
+  BetExplorerScraperOptions,
+  | "maxMatches"
+  | "prematchTrackHours"
+  | "prematchFarPollMinutes"
+  | "prematchNearPollMinutes"
+  | "prematchFinalPollMinutes"
+  | "livePollMinutes"
+>;
+
+export function scheduledIntervalMinutes(
+  candidate: BetExplorerCandidate,
+  options: Omit<ScheduleOptions, "maxMatches">,
+): number | null {
+  if (candidate.phaseHint === "live") return options.livePollMinutes;
+  if (candidate.deltaMinutes > options.prematchTrackHours * 60) return null;
+  if (candidate.deltaMinutes > 60) return options.prematchFarPollMinutes;
+  if (candidate.deltaMinutes > 15) return options.prematchNearPollMinutes;
+  return options.prematchFinalPollMinutes;
+}
+
+export function selectScheduledCandidates(
+  candidates: BetExplorerCandidate[],
+  lastCheckByEvent: ReadonlyMap<string, number>,
+  now: Date,
+  options: ScheduleOptions,
+): BetExplorerCandidate[] {
+  return candidates
+    .filter((candidate) => {
+      const interval = scheduledIntervalMinutes(candidate, options);
+      if (interval === null) return false;
+      const lastCheck = lastCheckByEvent.get(candidate.eventId);
+      return lastCheck === undefined || now.getTime() - lastCheck >= interval * 60_000;
+    })
+    .sort((a, b) => {
+      if (a.phaseHint !== b.phaseHint) return a.phaseHint === "live" ? -1 : 1;
+      const lastA = lastCheckByEvent.get(a.eventId) ?? 0;
+      const lastB = lastCheckByEvent.get(b.eventId) ?? 0;
+      return lastA - lastB || a.deltaMinutes - b.deltaMinutes;
+    })
+    .slice(0, options.maxMatches);
+}
+
+function istanbulDayKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 export function canonicalBookmaker(value: string): string {
@@ -328,6 +426,8 @@ async function snapshotPage(page: Page): Promise<BetExplorerPageSnapshot> {
 export class BetExplorerScraperProvider implements OddsProvider {
   readonly name = "betexplorer_scraper";
   private browserPromise: Promise<Browser> | null = null;
+  private readonly lastCheckByEvent = new Map<string, number>();
+  private lastCandidates: BetExplorerCandidate[] = [];
 
   constructor(private readonly options: BetExplorerScraperOptions) {}
 
@@ -335,7 +435,9 @@ export class BetExplorerScraperProvider implements OddsProvider {
     const now = new Date();
     const candidates = await this.fetchCandidates(now, signal);
     if (candidates.length === 0) {
-      logger.warn("BetExplorer taranacak mac dondurmedi.");
+      logger.info("BetExplorer gunluk mac listesini yeniledi; su anda oran kontrol zamani gelen mac yok.", {
+        dailyFixtures: this.lastCandidates.length,
+      });
       return [];
     }
 
@@ -419,6 +521,39 @@ export class BetExplorerScraperProvider implements OddsProvider {
     if (active) await (await active).close();
   }
 
+  getLastFixtures(): MatchFixture[] {
+    const now = new Date();
+    return this.lastCandidates.map((candidate) => {
+      const lastCheck = this.lastCheckByEvent.get(candidate.eventId);
+      const currentDeltaMinutes = (Date.parse(candidate.commenceTime) - now.getTime()) / 60_000;
+      const currentCandidate: BetExplorerCandidate = {
+        ...candidate,
+        deltaMinutes: currentDeltaMinutes,
+        phaseHint: currentDeltaMinutes <= 0 ? "live" : "prematch",
+      };
+      const interval = scheduledIntervalMinutes(currentCandidate, this.options);
+      const firstTrackingAt = Date.parse(candidate.commenceTime) - this.options.prematchTrackHours * 60 * 60_000;
+      const nextCheck =
+        interval === null
+          ? firstTrackingAt
+          : lastCheck === undefined
+            ? now.getTime()
+            : lastCheck + interval * 60_000;
+      return {
+        provider: this.name,
+        sourceEventId: candidate.eventId,
+        leagueName: candidate.leagueName,
+        homeTeam: candidate.homeTeam,
+        awayTeam: candidate.awayTeam,
+        commenceTime: candidate.commenceTime,
+        phase: currentCandidate.phaseHint,
+        sourceUrl: candidate.url,
+        ...(lastCheck === undefined ? {} : { lastOddsCheckAt: new Date(lastCheck).toISOString() }),
+        nextOddsCheckAt: new Date(Math.max(nextCheck, now.getTime())).toISOString(),
+      };
+    });
+  }
+
   private async fetchCandidates(now: Date, externalSignal?: AbortSignal): Promise<BetExplorerCandidate[]> {
     const timeoutSignal = AbortSignal.timeout(this.options.pageTimeoutMs);
     const signal = externalSignal ? AbortSignal.any([externalSignal, timeoutSignal]) : timeoutSignal;
@@ -434,7 +569,18 @@ export class BetExplorerScraperProvider implements OddsProvider {
     if (contentLength > MAX_INDEX_BYTES) throw new Error("BetExplorer liste sayfasi beklenenden buyuk.");
     const html = await response.text();
     if (html.length > MAX_INDEX_BYTES) throw new Error("BetExplorer liste sayfasi beklenenden buyuk.");
-    return parseCandidateIndexHtml(html, now, this.options);
+    const allCandidates = parseFixtureIndexHtml(html, now, this.options);
+    const today = istanbulDayKey(now);
+    this.lastCandidates = allCandidates.filter(
+      (candidate) => istanbulDayKey(new Date(candidate.commenceTime)) === today,
+    );
+    const currentIds = new Set(this.lastCandidates.map((candidate) => candidate.eventId));
+    for (const eventId of this.lastCheckByEvent.keys()) {
+      if (!currentIds.has(eventId)) this.lastCheckByEvent.delete(eventId);
+    }
+    const selected = selectScheduledCandidates(this.lastCandidates, this.lastCheckByEvent, now, this.options);
+    for (const candidate of selected) this.lastCheckByEvent.set(candidate.eventId, now.getTime());
+    return selected;
   }
 
   private browser(): Promise<Browser> {

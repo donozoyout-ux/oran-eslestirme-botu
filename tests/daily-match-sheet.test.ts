@@ -1,0 +1,68 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { JsonDailyMatchSheet } from "../src/daily-match-sheet.js";
+import type { MatchFixture, OddsQuote } from "../src/domain.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+});
+
+function createSheet(): JsonDailyMatchSheet {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "daily-sheet-"));
+  temporaryDirectories.push(directory);
+  return new JsonDailyMatchSheet(path.join(directory, "sheet.json"), 8);
+}
+
+function quote(price: number, updatedAt: string, commenceTime: string): OddsQuote {
+  return {
+    provider: "test",
+    bookmakerKey: "book-a",
+    bookmakerName: "Book A",
+    sourceEventId: "event-1",
+    sportKey: "soccer",
+    leagueName: "Test Ligi",
+    homeTeam: "A",
+    awayTeam: "B",
+    commenceTime,
+    phase: "prematch",
+    marketKey: "total_goals",
+    marketName: "Toplam Gol",
+    period: "full_time",
+    selectionKey: "over",
+    selectionName: "Üst",
+    line: 2.5,
+    price,
+    updatedAt,
+  };
+}
+
+describe("gunluk mac tablosu", () => {
+  it("fiksturu ve oran gecmisini saklar, yuzde 8 hareketi sinyale cevirir", async () => {
+    const sheet = createSheet();
+    const secondCapture = new Date();
+    const firstCapture = new Date(secondCapture.getTime() - 60_000);
+    const commenceTime = new Date(secondCapture.getTime() + 3_600_000).toISOString();
+    const fixture: MatchFixture = {
+      provider: "test",
+      sourceEventId: "event-1",
+      leagueName: "Test Ligi",
+      homeTeam: "A",
+      awayTeam: "B",
+      commenceTime,
+      phase: "prematch",
+    };
+    await sheet.record([fixture], [quote(2.6, firstCapture.toISOString(), commenceTime)], [], firstCapture);
+    await sheet.record([fixture], [quote(2.34, secondCapture.toISOString(), commenceTime)], [], secondCapture);
+
+    const snapshot = sheet.getSnapshot();
+    expect(snapshot.fixtures).toHaveLength(1);
+    expect(snapshot.oddsSnapshotCount).toBe(2);
+    expect(snapshot.recentSignals[0]).toMatchObject({ type: "odds_drop", line: 2.5 });
+    expect(sheet.fixturesCsv()).toContain("Test Ligi");
+    expect(sheet.oddsHistoryCsv()).toContain("2.34");
+  });
+});
