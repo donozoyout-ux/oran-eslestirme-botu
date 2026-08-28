@@ -186,20 +186,28 @@ export function selectScheduledCandidates(
   now: Date,
   options: ScheduleOptions,
 ): BetExplorerCandidate[] {
-  return candidates
-    .filter((candidate) => {
+  const due = candidates.filter((candidate) => {
       const interval = scheduledIntervalMinutes(candidate, options);
       if (interval === null) return false;
       const lastCheck = lastCheckByEvent.get(candidate.eventId);
       return lastCheck === undefined || now.getTime() - lastCheck >= interval * 60_000;
-    })
-    .sort((a, b) => {
-      if (a.phaseHint !== b.phaseHint) return a.phaseHint === "live" ? -1 : 1;
+    });
+  const byFairness = (a: BetExplorerCandidate, b: BetExplorerCandidate): number => {
       const lastA = lastCheckByEvent.get(a.eventId) ?? 0;
       const lastB = lastCheckByEvent.get(b.eventId) ?? 0;
       return lastA - lastB || a.deltaMinutes - b.deltaMinutes;
-    })
-    .slice(0, options.maxMatches);
+    };
+  const live = due.filter((candidate) => candidate.phaseHint === "live").sort(byFairness);
+  const upcoming = due.filter((candidate) => candidate.phaseHint === "prematch").sort(byFairness);
+  const liveTarget = Math.ceil(options.maxMatches / 2);
+  const selected = [...live.slice(0, liveTarget), ...upcoming.slice(0, options.maxMatches - liveTarget)];
+  const selectedIds = new Set(selected.map((candidate) => candidate.eventId));
+  const remainder = [...live.slice(liveTarget), ...upcoming.slice(options.maxMatches - liveTarget)].sort(byFairness);
+  for (const candidate of remainder) {
+    if (selected.length >= options.maxMatches) break;
+    if (!selectedIds.has(candidate.eventId)) selected.push(candidate);
+  }
+  return selected;
 }
 
 function istanbulDayKey(date: Date): string {

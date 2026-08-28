@@ -66,6 +66,28 @@ describe("BetExplorer scraper", () => {
     ]);
   });
 
+  it("canli maclar yaklasan maclari tarama disinda birakmaz", () => {
+    const options = {
+      maxMatches: 2,
+      prematchTrackHours: 6,
+      prematchFarPollMinutes: 60,
+      prematchNearPollMinutes: 15,
+      prematchFinalPollMinutes: 5,
+      livePollMinutes: 3,
+    };
+    const fixtures: BetExplorerCandidate[] = [
+      { ...candidate("live"), eventId: "LIVE0001" },
+      { ...candidate("live"), eventId: "LIVE0002", deltaMinutes: -20 },
+      { ...candidate("prematch"), eventId: "NEXT0001", deltaMinutes: 10 },
+      { ...candidate("prematch"), eventId: "NEXT0002", deltaMinutes: 20 },
+    ];
+
+    expect(selectScheduledCandidates(fixtures, new Map(), now, options).map((item) => item.phaseHint)).toEqual([
+      "live",
+      "prematch",
+    ]);
+  });
+
   it("mac onu 1X2 oranlarini bookmaker bazinda donusturur", () => {
     const snapshot: BetExplorerPageSnapshot = {
       homeTeam: "Crystal Palace",
