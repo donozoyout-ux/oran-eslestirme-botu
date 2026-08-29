@@ -14,6 +14,7 @@ export function createProvider(config: AppConfig): OddsProvider {
       pageTimeoutMs: config.scraperPageTimeoutMs,
       waitMs: config.scraperWaitMs,
       allowVisibleBookmakerFallback: config.scraperAllowVisibleBookmakerFallback,
+      leagueScope: config.leagueScope,
       prematchTrackHours: config.prematchTrackHours,
       prematchFarPollMinutes: config.prematchFarPollMinutes,
       prematchNearPollMinutes: config.prematchNearPollMinutes,
