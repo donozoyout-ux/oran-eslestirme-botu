@@ -8,20 +8,24 @@ interface PersistedState {
   sentAtByAlertId: Record<string, string>;
 }
 
+const ALERT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export class JsonAlertStore implements AlertStore {
   private readonly sentAtByAlertId = new Map<string, number>();
 
   constructor(
     private readonly filePath: string,
+    // Geriye donuk config uyumlulugu icin tutuluyor. Ayni alarm kimligi artik
+    // cooldown sonunda tekrar gonderilmez; yeni piyasa durumu yeni ID uretir.
     private readonly cooldownSeconds: number,
   ) {
+    void this.cooldownSeconds;
     this.load();
   }
 
   shouldSend(alertId: string, now: Date): boolean {
-    const lastSentAt = this.sentAtByAlertId.get(alertId);
-    if (lastSentAt === undefined) return true;
-    return now.getTime() - lastSentAt >= this.cooldownSeconds * 1000;
+    this.prune(now);
+    return !this.sentAtByAlertId.has(alertId);
   }
 
   async markSent(alertId: string, now: Date): Promise<void> {
@@ -39,15 +43,15 @@ export class JsonAlertStore implements AlertStore {
         const timestamp = Date.parse(value);
         if (Number.isFinite(timestamp)) this.sentAtByAlertId.set(id, timestamp);
       }
+      this.prune(new Date());
     } catch (error) {
       logger.warn("Bildirim durumu okunamadi; bos durumla baslanacak.", { error: errorMessage(error) });
     }
   }
 
   private prune(now: Date): void {
-    const retentionMs = Math.max(this.cooldownSeconds * 3, 86_400) * 1000;
     for (const [id, timestamp] of this.sentAtByAlertId) {
-      if (now.getTime() - timestamp > retentionMs) this.sentAtByAlertId.delete(id);
+      if (now.getTime() - timestamp > ALERT_RETENTION_MS) this.sentAtByAlertId.delete(id);
     }
   }
 
@@ -68,14 +72,23 @@ export class JsonAlertStore implements AlertStore {
 export class MemoryAlertStore implements AlertStore {
   private readonly sentAtByAlertId = new Map<string, number>();
 
-  constructor(private readonly cooldownSeconds: number) {}
+  constructor(private readonly cooldownSeconds: number) {
+    void this.cooldownSeconds;
+  }
 
   shouldSend(alertId: string, now: Date): boolean {
-    const sentAt = this.sentAtByAlertId.get(alertId);
-    return sentAt === undefined || now.getTime() - sentAt >= this.cooldownSeconds * 1000;
+    this.prune(now);
+    return !this.sentAtByAlertId.has(alertId);
   }
 
   async markSent(alertId: string, now: Date): Promise<void> {
     this.sentAtByAlertId.set(alertId, now.getTime());
+    this.prune(now);
+  }
+
+  private prune(now: Date): void {
+    for (const [id, timestamp] of this.sentAtByAlertId) {
+      if (now.getTime() - timestamp > ALERT_RETENTION_MS) this.sentAtByAlertId.delete(id);
+    }
   }
 }
