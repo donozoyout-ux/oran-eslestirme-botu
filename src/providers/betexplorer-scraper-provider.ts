@@ -1,6 +1,7 @@
 import { load } from "cheerio";
 import { chromium, type Browser, type Page } from "playwright-core";
 import type { MarketKey, MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
+import { DEFAULT_LEAGUE_SCOPE, isLeagueInScope, type LeagueScope } from "../league-scope.js";
 import { errorMessage, logger } from "../logger.js";
 
 const BASE_URL = "https://www.betexplorer.com";
@@ -15,6 +16,7 @@ export interface BetExplorerScraperOptions {
   pageTimeoutMs: number;
   waitMs: number;
   allowVisibleBookmakerFallback: boolean;
+  leagueScope?: LeagueScope;
   prematchTrackHours: number;
   prematchFarPollMinutes: number;
   prematchNearPollMinutes: number;
@@ -580,7 +582,9 @@ export class BetExplorerScraperProvider implements OddsProvider {
     const allCandidates = parseFixtureIndexHtml(html, now, this.options);
     const today = istanbulDayKey(now);
     this.lastCandidates = allCandidates.filter(
-      (candidate) => istanbulDayKey(new Date(candidate.commenceTime)) === today,
+      (candidate) =>
+        istanbulDayKey(new Date(candidate.commenceTime)) === today &&
+        isLeagueInScope(candidate.url, this.options.leagueScope ?? DEFAULT_LEAGUE_SCOPE),
     );
     const currentIds = new Set(this.lastCandidates.map((candidate) => candidate.eventId));
     for (const eventId of this.lastCheckByEvent.keys()) {
