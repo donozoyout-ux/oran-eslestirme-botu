@@ -61,8 +61,14 @@ function isFresh(quote: OddsQuote, now: Date, maxAgeSeconds: number): boolean {
   return ageMs <= maxAgeSeconds * 1000 && ageMs >= -60_000;
 }
 
-function stableAlertId(event: string, market: string): string {
-  return createHash("sha256").update(`${event}|${market}`).digest("hex").slice(0, 24);
+function stableAlertId(event: string, market: string, quoteA: OddsQuote, quoteB: OddsQuote): string {
+  // Ayni mac/pazar ve ayni fiyat cifti tek alarmdir. Oranlardan biri gercekten
+  // degistiginde yeni ID olusur ve yeni Telegram bildirimi gonderilebilir.
+  const prices = [
+    `${quoteA.bookmakerKey}:${quoteA.price.toFixed(3)}`,
+    `${quoteB.bookmakerKey}:${quoteB.price.toFixed(3)}`,
+  ].sort();
+  return createHash("sha256").update(`${event}|${market}|${prices.join("|")}`).digest("hex").slice(0, 24);
 }
 
 export function findOddsMatches(
@@ -104,7 +110,7 @@ export function findOddsMatches(
     const event = eventKey(bestPair.quoteA);
     const market = marketSignature(bestPair.quoteA);
     matches.push({
-      id: stableAlertId(event, market),
+      id: stableAlertId(event, market, bestPair.quoteA, bestPair.quoteB),
       eventKey: event,
       marketSignature: market,
       phase: bestPair.quoteA.phase,
