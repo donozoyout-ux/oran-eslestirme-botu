@@ -127,7 +127,7 @@ describe("Google Sheets aynasi", () => {
 
     expect(body.data[0].values[0]).toContain("Karar");
     expect(body.data[0].values[0]).toContain("Piyasa Value %");
-    expect(body.data[0].values[1][0]).toBe("GÜÇLÜ ADAY");
+    expect(body.data[0].values[1][0]).toBe("İZLE");
     expect(body.data[0].values[1][8]).toBe(2.16);
     expect(body.data[1].values[0]).toContain("En Iyi Oran");
     expect(body.data[2].values).toHaveLength(4);
