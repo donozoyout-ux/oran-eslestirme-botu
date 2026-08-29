@@ -172,6 +172,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `SCRAPER_PAGE_TIMEOUT_MS` | `60000` | Bir scraper sayfasi icin zaman asimi |
 | `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
 | `SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK` | `true` | Secilenler bolgesel olarak yoksa gorunen kaynaklari kullanir |
+| `SCRAPER_LEAGUE_SCOPE` | `turkey_europe_top10_big5_tier3` | Turkiye, Avrupa'nin 10 oncelikli ust ligi ve Ingiltere/Ispanya/Italya/Almanya/Fransa'nin 2. ile 3. ligleri; `all` yazilirsa filtre kapanir |
 | `CHROMIUM_EXECUTABLE_PATH` | bos | Chromium calistirilabilir dosya yolu |
 | `PREMATCH_TRACK_HOURS` | `6` | Mac oncesi detayli oran takibinin baslayacagi saat |
 | `PREMATCH_FAR_POLL_MINUTES` | `60` | 6-1 saat arasi kontrol araligi |
