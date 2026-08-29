@@ -1,4 +1,5 @@
 import { createSign } from "node:crypto";
+import type { MatchFixture } from "./domain.js";
 import type { DailySheetDataset, DailySheetMirror, OddsHistoryEntry } from "./daily-match-sheet.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -30,6 +31,7 @@ interface SpreadsheetMetadata {
 }
 
 interface RankedSelection {
+  sourceEventId: string;
   event: string;
   phase: string;
   market: string;
@@ -100,6 +102,30 @@ function safeValue(value: unknown): SheetValue {
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
 }
 
+function isActiveFixture(fixture: MatchFixture, now = new Date()): boolean {
+  if (fixture.phase === "live") return true;
+  const commence = Date.parse(fixture.commenceTime);
+  return Number.isFinite(commence) && commence > now.getTime();
+}
+
+function activeFixtures(fixtures: MatchFixture[], now = new Date()): MatchFixture[] {
+  const unique = new Map<string, MatchFixture>();
+  for (const fixture of fixtures) {
+    if (!isActiveFixture(fixture, now)) continue;
+    const existing = unique.get(fixture.sourceEventId);
+    if (!existing || fixture.phase === "live") unique.set(fixture.sourceEventId, fixture);
+  }
+  return [...unique.values()].sort((a, b) => {
+    if (a.phase !== b.phase) return a.phase === "live" ? -1 : 1;
+    return Date.parse(a.commenceTime) - Date.parse(b.commenceTime);
+  });
+}
+
+function activeHistory(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): OddsHistoryEntry[] {
+  const activeIds = new Set(fixtures.map((fixture) => fixture.sourceEventId));
+  return entries.filter((entry) => activeIds.has(entry.sourceEventId));
+}
+
 function latestHistory(entries: OddsHistoryEntry[]): OddsHistoryEntry[] {
   const latest = new Map<string, OddsHistoryEntry>();
   for (const entry of entries) {
@@ -157,8 +183,9 @@ function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
         ? `Sadece ${list.length} kaynak var; karar için veri zayıf.`
         : valuePercent >= 2
           ? `${list.length} kaynakta en iyi oran piyasa ortasına göre %${valuePercent.toFixed(1)} avantajlı.`
-          : `Kaynaklar karşılaştırıldı; belirgin fiyat avantajı oluşmadı.`;
+          : "Kaynaklar karşılaştırıldı; belirgin fiyat avantajı oluşmadı.";
       return {
+        sourceEventId: first.sourceEventId,
         event: first.event,
         phase: first.phase,
         market: first.market,
@@ -182,13 +209,32 @@ function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
     .sort((a, b) => b.score - a.score || b.valuePercent - a.valuePercent);
 }
 
-function simpleDecisionRows(entries: OddsHistoryEntry[]): SheetValue[][] {
-  const useful = rankedSelections(entries)
-    .filter((item) => item.verdict !== "UZAK DUR")
-    .slice(0, 12);
+function oneBestSelectionPerMatch(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): RankedSelection[] {
+  const fixtureById = new Map(fixtures.map((fixture) => [fixture.sourceEventId, fixture]));
+  const bestByMatch = new Map<string, RankedSelection>();
+  for (const item of rankedSelections(entries)) {
+    if (item.verdict === "UZAK DUR") continue;
+    if (!fixtureById.has(item.sourceEventId)) continue;
+    const existing = bestByMatch.get(item.sourceEventId);
+    if (!existing || item.score > existing.score || (item.score === existing.score && item.valuePercent > existing.valuePercent)) {
+      bestByMatch.set(item.sourceEventId, item);
+    }
+  }
+  return [...bestByMatch.values()].sort((a, b) => {
+    const fixtureA = fixtureById.get(a.sourceEventId)!;
+    const fixtureB = fixtureById.get(b.sourceEventId)!;
+    if (fixtureA.phase !== fixtureB.phase) return fixtureA.phase === "live" ? -1 : 1;
+    const timeDifference = Date.parse(fixtureA.commenceTime) - Date.parse(fixtureB.commenceTime);
+    if (timeDifference !== 0) return timeDifference;
+    return b.score - a.score;
+  });
+}
 
+function simpleDecisionRows(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): SheetValue[][] {
+  const useful = oneBestSelectionPerMatch(entries, fixtures).slice(0, 20);
   const rows: SheetValue[][] = [[
     "SIRA",
+    "DURUM",
     "KARAR",
     "MAÇ",
     "NE OYNANIR?",
@@ -199,11 +245,13 @@ function simpleDecisionRows(entries: OddsHistoryEntry[]): SheetValue[][] {
   ]];
 
   useful.forEach((item, index) => {
+    const fixture = fixtures.find((candidate) => candidate.sourceEventId === item.sourceEventId);
     const choice = item.line === null
       ? `${item.market} → ${item.selection}`
       : `${item.market} ${item.line} → ${item.selection}`;
     rows.push([
       index + 1,
+      fixture?.phase === "live" ? "CANLI" : "YAKLAŞAN",
       item.verdict,
       item.event,
       choice,
@@ -217,13 +265,14 @@ function simpleDecisionRows(entries: OddsHistoryEntry[]): SheetValue[][] {
   if (useful.length === 0) {
     rows.push([
       "",
+      "",
       "BEKLE",
-      "Şu anda yeterince güçlü aday yok",
-      "Veri geldikçe burada doğrudan seçim görünecek",
+      "Şu anda aktif ve yeterince güçlü aday yok",
+      "Yeni maç/veri geldikçe burada tek satır halinde görünecek",
       "",
       "",
       "",
-      "En az birkaç kaynaktan tutarlı oran bekleniyor.",
+      "Biten maçlar otomatik olarak bu görünümden kaldırılır.",
     ].map(safeValue));
   }
   return rows;
@@ -235,7 +284,7 @@ function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetVal
   ]];
   for (const entry of latestHistory(entries).filter((item) => marketKeys.includes(item.marketKey))) {
     rows.push([
-      entry.event, entry.phase, entry.market, entry.period, entry.selection, entry.line ?? "",
+      entry.event, entry.phase === "live" ? "CANLI" : "YAKLAŞAN", entry.market, entry.period, entry.selection, entry.line ?? "",
       entry.bookmaker, entry.price, entry.capturedAt,
     ].map(safeValue));
   }
@@ -254,7 +303,7 @@ function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
     const best = [...list].sort((a, b) => b.price - a.price)[0]!;
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length;
     rows.push([
-      first.event, first.phase, first.market, first.period, first.selection, first.line ?? "",
+      first.event, first.phase === "live" ? "CANLI" : "YAKLAŞAN", first.market, first.period, first.selection, first.line ?? "",
       Number(best.price.toFixed(3)), best.bookmaker, Number(avg.toFixed(3)), list.length,
       Number(Math.min(...prices).toFixed(3)), Number(Math.max(...prices).toFixed(3)),
     ].map(safeValue));
@@ -262,18 +311,18 @@ function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
   return rows;
 }
 
-function couponCandidateRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+function couponCandidateRows(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): SheetValue[][] {
   const rows: SheetValue[][] = [[
     "Karar", "Puan", "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi",
     "En İyi Oran", "Bookmaker", "Piyasa Adil Oran", "Adil Olasılık %", "Piyasa Value %",
     "Kaynak", "Dağılım %", "Neden", "Güncelleme",
   ]];
-  for (const item of rankedSelections(entries).slice(0, 30)) {
+  for (const item of oneBestSelectionPerMatch(entries, fixtures).slice(0, 30)) {
     rows.push([
       item.verdict,
       item.score,
       item.event,
-      item.phase,
+      item.phase === "live" ? "CANLI" : "YAKLAŞAN",
       item.market,
       item.period,
       item.selection,
@@ -293,14 +342,18 @@ function couponCandidateRows(entries: OddsHistoryEntry[]): SheetValue[][] {
 }
 
 function tableRows(dataset: DailySheetDataset): SheetTable[] {
+  const fixturesForSheet = activeFixtures(dataset.fixtures);
+  const historyForSheet = activeHistory(dataset.oddsHistory, fixturesForSheet);
+  const activeEventNames = new Set(fixturesForSheet.map((fixture) => `${fixture.homeTeam} - ${fixture.awayTeam}`));
+
   const fixtures: SheetValue[][] = [[
     "Tarih", "Maç Kimliği", "Lig", "Ev Sahibi", "Deplasman", "Başlangıç", "Durum",
     "Son Oran Kontrolü", "Sonraki Oran Kontrolü", "Kaynak URL",
   ]];
-  for (const fixture of dataset.fixtures) {
+  for (const fixture of fixturesForSheet) {
     fixtures.push([
       dataset.date, fixture.sourceEventId, fixture.leagueName, fixture.homeTeam, fixture.awayTeam,
-      fixture.commenceTime, fixture.phase, fixture.lastOddsCheckAt ?? "", fixture.nextOddsCheckAt ?? "", fixture.sourceUrl ?? "",
+      fixture.commenceTime, fixture.phase === "live" ? "CANLI" : "YAKLAŞAN", fixture.lastOddsCheckAt ?? "", fixture.nextOddsCheckAt ?? "", fixture.sourceUrl ?? "",
     ].map(safeValue));
   }
 
@@ -308,9 +361,9 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
     "Kayıt Saati", "Maç Kimliği", "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi",
     "Bookmaker", "Oran", "Kaynak Güncelleme Saati",
   ]];
-  for (const entry of dataset.oddsHistory) {
+  for (const entry of historyForSheet) {
     history.push([
-      entry.capturedAt, entry.sourceEventId, entry.event, entry.phase, entry.market, entry.period,
+      entry.capturedAt, entry.sourceEventId, entry.event, entry.phase === "live" ? "CANLI" : "YAKLAŞAN", entry.market, entry.period,
       entry.selection, entry.line ?? "", entry.bookmaker, entry.price, entry.sourceUpdatedAt,
     ].map(safeValue));
   }
@@ -318,7 +371,7 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   const signals: SheetValue[][] = [[
     "Tespit Saati", "Tür", "Maç", "Pazar", "Seçim", "Çizgi", "Açıklama", "Telegram Saati", "Sinyal Kimliği",
   ]];
-  for (const signal of dataset.signals) {
+  for (const signal of dataset.signals.filter((signal) => activeEventNames.has(signal.event))) {
     signals.push([
       signal.detectedAt, signal.type, signal.event, signal.market, signal.selection, signal.line ?? "",
       signal.detail, signal.notifiedAt ?? "", signal.id,
@@ -326,12 +379,12 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   }
 
   return [
-    { title: "BUGUN_NE_OYNANIR", rows: simpleDecisionRows(dataset.oddsHistory), columnWidths: [60, 120, 240, 260, 85, 150, 90, 360] },
-    { title: "Kupon_Adaylari", rows: couponCandidateRows(dataset.oddsHistory), columnWidths: [120, 70, 230, 90, 155, 105, 145, 80, 100, 155, 115, 105, 105, 80, 90, 330, 165] },
-    { title: "Pazar_Ozeti", rows: marketSummaryRows(dataset.oddsHistory), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
-    { title: "Gol_Alt_Ust", rows: marketRows(dataset.oddsHistory, ["total_goals", "both_teams_to_score"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
-    { title: "Kornerler", rows: marketRows(dataset.oddsHistory, ["corners"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
-    { title: "Kartlar", rows: marketRows(dataset.oddsHistory, ["cards"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
+    { title: "BUGUN_NE_OYNANIR", rows: simpleDecisionRows(historyForSheet, fixturesForSheet), columnWidths: [60, 95, 120, 240, 260, 85, 150, 90, 360] },
+    { title: "Kupon_Adaylari", rows: couponCandidateRows(historyForSheet, fixturesForSheet), columnWidths: [120, 70, 230, 90, 155, 105, 145, 80, 100, 155, 115, 105, 105, 80, 90, 330, 165] },
+    { title: "Pazar_Ozeti", rows: marketSummaryRows(historyForSheet), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
+    { title: "Gol_Alt_Ust", rows: marketRows(historyForSheet, ["total_goals", "both_teams_to_score"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
+    { title: "Kornerler", rows: marketRows(historyForSheet, ["corners"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
+    { title: "Kartlar", rows: marketRows(historyForSheet, ["cards"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
     { title: "Maclar", rows: fixtures, columnWidths: [105, 115, 175, 165, 165, 155, 105, 165, 165, 280] },
     { title: "Oran_Gecmisi", rows: history, columnWidths: [165, 115, 230, 100, 145, 110, 135, 80, 145, 85, 175] },
     { title: "Sinyaller", rows: signals, columnWidths: [165, 115, 230, 145, 135, 80, 350, 165, 245] },
@@ -490,7 +543,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
       });
 
       if ((table.title === "Kupon_Adaylari" || table.title === "BUGUN_NE_OYNANIR") && table.rows.length > 1) {
-        const verdictColumn = table.title === "BUGUN_NE_OYNANIR" ? 1 : 0;
+        const verdictColumn = table.title === "BUGUN_NE_OYNANIR" ? 2 : 0;
         const rowEnd = table.rows.length;
         const rules = [
           { text: "GÜÇLÜ ADAY", backgroundColor: { red: 0.82, green: 0.94, blue: 0.84 } },
