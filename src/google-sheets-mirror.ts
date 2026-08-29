@@ -358,3 +358,4 @@ export class GoogleSheetsMirror implements DailySheetMirror {
     if (!response.ok) throw new Error(`Google Sheets ${response.status}: ${text.slice(0, 500)}`);
     return (text ? JSON.parse(text) : {}) as T;
   }
+}
