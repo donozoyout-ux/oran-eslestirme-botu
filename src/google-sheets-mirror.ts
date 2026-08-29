@@ -29,6 +29,26 @@ interface SpreadsheetMetadata {
   sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
 }
 
+interface RankedSelection {
+  event: string;
+  phase: string;
+  market: string;
+  period: string;
+  selection: string;
+  line: number | null;
+  bookmaker: string;
+  bestPrice: number;
+  fairOdds: number;
+  fairProbability: number;
+  valuePercent: number;
+  sourceCount: number;
+  dispersionPercent: number;
+  score: number;
+  verdict: "GÜÇLÜ ADAY" | "İZLE" | "UZAK DUR";
+  reason: string;
+  capturedAt: string;
+}
+
 function base64Url(value: string | Buffer): string {
   return Buffer.from(value).toString("base64url");
 }
@@ -48,7 +68,7 @@ function normalizePrivateKey(value: string): string {
       const parsed = JSON.parse(candidate) as { private_key?: unknown };
       if (typeof parsed.private_key === "string") candidate = parsed.private_key;
     } catch {
-      // Validation below will explain the problem.
+      // Validation below explains invalid values.
     }
   } else if (candidate.startsWith('"') && candidate.endsWith('"')) {
     try {
@@ -83,7 +103,14 @@ function safeValue(value: unknown): SheetValue {
 function latestHistory(entries: OddsHistoryEntry[]): OddsHistoryEntry[] {
   const latest = new Map<string, OddsHistoryEntry>();
   for (const entry of entries) {
-    const key = [entry.sourceEventId, entry.marketKey, entry.period, entry.selectionKey, entry.line ?? "", entry.bookmakerKey].join("|");
+    const key = [
+      entry.sourceEventId,
+      entry.marketKey,
+      entry.period,
+      entry.selectionKey,
+      entry.line ?? "",
+      entry.bookmakerKey,
+    ].join("|");
     const existing = latest.get(key);
     if (!existing || Date.parse(entry.capturedAt) >= Date.parse(existing.capturedAt)) latest.set(key, entry);
   }
@@ -107,9 +134,104 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
 }
 
+function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
+  return groupedSelections(entries)
+    .map((list): RankedSelection | null => {
+      const first = list[0]!;
+      const prices = list.map((item) => item.price).filter((price) => Number.isFinite(price) && price > 1);
+      if (prices.length === 0) return null;
+      const best = [...list].sort((a, b) => b.price - a.price)[0]!;
+      const fairOdds = median(prices);
+      const valuePercent = ((best.price / fairOdds) - 1) * 100;
+      const dispersionPercent = fairOdds > 0 ? ((Math.max(...prices) - Math.min(...prices)) / fairOdds) * 100 : 100;
+      const coverageScore = Math.min(list.length / 5, 1) * 35;
+      const agreementScore = Math.max(0, 1 - dispersionPercent / 12) * 35;
+      const valueScore = Math.min(Math.max(valuePercent, 0) / 8, 1) * 30;
+      const score = Math.round(coverageScore + agreementScore + valueScore);
+      const verdict: RankedSelection["verdict"] = score >= 75 && valuePercent >= 2 && list.length >= 3
+        ? "GÜÇLÜ ADAY"
+        : score >= 58 && valuePercent > 0
+          ? "İZLE"
+          : "UZAK DUR";
+      const reason = list.length < 3
+        ? `Sadece ${list.length} kaynak var; karar için veri zayıf.`
+        : valuePercent >= 2
+          ? `${list.length} kaynakta en iyi oran piyasa ortasına göre %${valuePercent.toFixed(1)} avantajlı.`
+          : `Kaynaklar karşılaştırıldı; belirgin fiyat avantajı oluşmadı.`;
+      return {
+        event: first.event,
+        phase: first.phase,
+        market: first.market,
+        period: first.period,
+        selection: first.selection,
+        line: first.line,
+        bookmaker: best.bookmaker,
+        bestPrice: best.price,
+        fairOdds,
+        fairProbability: 100 / fairOdds,
+        valuePercent,
+        sourceCount: list.length,
+        dispersionPercent,
+        score,
+        verdict,
+        reason,
+        capturedAt: best.capturedAt,
+      };
+    })
+    .filter((item): item is RankedSelection => item !== null)
+    .sort((a, b) => b.score - a.score || b.valuePercent - a.valuePercent);
+}
+
+function simpleDecisionRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+  const useful = rankedSelections(entries)
+    .filter((item) => item.verdict !== "UZAK DUR")
+    .slice(0, 12);
+
+  const rows: SheetValue[][] = [[
+    "SIRA",
+    "KARAR",
+    "MAÇ",
+    "NE OYNANIR?",
+    "ORAN",
+    "BOOKMAKER",
+    "GÜVEN",
+    "KISA NEDEN",
+  ]];
+
+  useful.forEach((item, index) => {
+    const choice = item.line === null
+      ? `${item.market} → ${item.selection}`
+      : `${item.market} ${item.line} → ${item.selection}`;
+    rows.push([
+      index + 1,
+      item.verdict,
+      item.event,
+      choice,
+      Number(item.bestPrice.toFixed(2)),
+      item.bookmaker,
+      `${item.score}/100`,
+      item.reason,
+    ].map(safeValue));
+  });
+
+  if (useful.length === 0) {
+    rows.push([
+      "",
+      "BEKLE",
+      "Şu anda yeterince güçlü aday yok",
+      "Veri geldikçe burada doğrudan seçim görünecek",
+      "",
+      "",
+      "",
+      "En az birkaç kaynaktan tutarlı oran bekleniyor.",
+    ].map(safeValue));
+  }
+  return rows;
+}
+
 function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetValue[][] {
   const rows: SheetValue[][] = [[
-    "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi", "Bookmaker", "Oran", "Kayit Saati",
+    "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi", "Bookmaker", "Oran", "Kayıt Saati",
   ]];
   for (const entry of latestHistory(entries).filter((item) => marketKeys.includes(item.marketKey))) {
     rows.push([
@@ -122,8 +244,8 @@ function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetVal
 
 function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
   const rows: SheetValue[][] = [[
-    "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi", "En Iyi Oran", "En Iyi Bookmaker",
-    "Ortalama Oran", "Kaynak Sayisi", "Min Oran", "Max Oran",
+    "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi", "En İyi Oran", "En İyi Bookmaker",
+    "Ortalama Oran", "Kaynak Sayısı", "Min Oran", "Max Oran",
   ]];
   for (const list of groupedSelections(entries)) {
     const first = list[0]!;
@@ -141,53 +263,12 @@ function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
 }
 
 function couponCandidateRows(entries: OddsHistoryEntry[]): SheetValue[][] {
-  const candidates = groupedSelections(entries).map((list) => {
-    const first = list[0]!;
-    const prices = list.map((item) => item.price).filter((price) => Number.isFinite(price) && price > 1);
-    if (prices.length === 0) return null;
-    const best = [...list].sort((a, b) => b.price - a.price)[0]!;
-    const fairOdds = median(prices);
-    const valuePercent = ((best.price / fairOdds) - 1) * 100;
-    const dispersionPercent = fairOdds > 0 ? ((Math.max(...prices) - Math.min(...prices)) / fairOdds) * 100 : 100;
-    const coverageScore = Math.min(list.length / 5, 1) * 35;
-    const agreementScore = Math.max(0, 1 - dispersionPercent / 12) * 35;
-    const valueScore = Math.min(Math.max(valuePercent, 0) / 8, 1) * 30;
-    const score = Math.round(coverageScore + agreementScore + valueScore);
-    const verdict = score >= 75 && valuePercent >= 2 && list.length >= 3
-      ? "GÜÇLÜ ADAY"
-      : score >= 58 && valuePercent > 0
-        ? "İZLE"
-        : "UZAK DUR";
-    const reason = `${list.length} kaynak | fiyat dağılımı %${dispersionPercent.toFixed(1)} | piyasa fiyat avantajı %${valuePercent.toFixed(1)}`;
-    return {
-      event: first.event,
-      phase: first.phase,
-      market: first.market,
-      period: first.period,
-      selection: first.selection,
-      line: first.line,
-      bookmaker: best.bookmaker,
-      bestPrice: best.price,
-      fairOdds,
-      fairProbability: 100 / fairOdds,
-      valuePercent,
-      sourceCount: list.length,
-      dispersionPercent,
-      score,
-      verdict,
-      reason,
-      capturedAt: best.capturedAt,
-    };
-  }).filter((item): item is NonNullable<typeof item> => item !== null)
-    .sort((a, b) => b.score - a.score || b.valuePercent - a.valuePercent)
-    .slice(0, 30);
-
   const rows: SheetValue[][] = [[
-    "Karar", "Puan", "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi",
-    "En Iyi Oran", "Bookmaker", "Piyasa Adil Oran", "Adil Olasilik %", "Piyasa Value %",
-    "Kaynak", "Dagilim %", "Neden", "Guncelleme",
+    "Karar", "Puan", "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi",
+    "En İyi Oran", "Bookmaker", "Piyasa Adil Oran", "Adil Olasılık %", "Piyasa Value %",
+    "Kaynak", "Dağılım %", "Neden", "Güncelleme",
   ]];
-  for (const item of candidates) {
+  for (const item of rankedSelections(entries).slice(0, 30)) {
     rows.push([
       item.verdict,
       item.score,
@@ -213,8 +294,8 @@ function couponCandidateRows(entries: OddsHistoryEntry[]): SheetValue[][] {
 
 function tableRows(dataset: DailySheetDataset): SheetTable[] {
   const fixtures: SheetValue[][] = [[
-    "Tarih", "Mac Kimligi", "Lig", "Ev Sahibi", "Deplasman", "Baslangic", "Durum",
-    "Son Oran Kontrolu", "Sonraki Oran Kontrolu", "Kaynak URL",
+    "Tarih", "Maç Kimliği", "Lig", "Ev Sahibi", "Deplasman", "Başlangıç", "Durum",
+    "Son Oran Kontrolü", "Sonraki Oran Kontrolü", "Kaynak URL",
   ]];
   for (const fixture of dataset.fixtures) {
     fixtures.push([
@@ -224,8 +305,8 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   }
 
   const history: SheetValue[][] = [[
-    "Kayit Saati", "Mac Kimligi", "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi",
-    "Bookmaker", "Oran", "Kaynak Guncelleme Saati",
+    "Kayıt Saati", "Maç Kimliği", "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi",
+    "Bookmaker", "Oran", "Kaynak Güncelleme Saati",
   ]];
   for (const entry of dataset.oddsHistory) {
     history.push([
@@ -235,7 +316,7 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   }
 
   const signals: SheetValue[][] = [[
-    "Tespit Saati", "Tur", "Mac", "Pazar", "Secim", "Cizgi", "Aciklama", "Telegram Saati", "Sinyal Kimligi",
+    "Tespit Saati", "Tür", "Maç", "Pazar", "Seçim", "Çizgi", "Açıklama", "Telegram Saati", "Sinyal Kimliği",
   ]];
   for (const signal of dataset.signals) {
     signals.push([
@@ -245,6 +326,7 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   }
 
   return [
+    { title: "BUGUN_NE_OYNANIR", rows: simpleDecisionRows(dataset.oddsHistory), columnWidths: [60, 120, 240, 260, 85, 150, 90, 360] },
     { title: "Kupon_Adaylari", rows: couponCandidateRows(dataset.oddsHistory), columnWidths: [120, 70, 230, 90, 155, 105, 145, 80, 100, 155, 115, 105, 105, 80, 90, 330, 165] },
     { title: "Pazar_Ozeti", rows: marketSummaryRows(dataset.oddsHistory), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
     { title: "Gol_Alt_Ust", rows: marketRows(dataset.oddsHistory, ["total_goals", "both_teams_to_score"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
@@ -373,7 +455,9 @@ export class GoogleSheetsMirror implements DailySheetMirror {
           range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: table.columnWidths.length },
           cell: {
             userEnteredFormat: {
-              backgroundColor: { red: 0.04, green: 0.14, blue: 0.24 },
+              backgroundColor: table.title === "BUGUN_NE_OYNANIR"
+                ? { red: 0.08, green: 0.35, blue: 0.20 }
+                : { red: 0.04, green: 0.14, blue: 0.24 },
               textFormat: { foregroundColor: { red: 1, green: 1, blue: 1 }, bold: true },
               horizontalAlignment: "CENTER",
               verticalAlignment: "MIDDLE",
@@ -405,17 +489,26 @@ export class GoogleSheetsMirror implements DailySheetMirror {
         });
       });
 
-      if (table.title === "Kupon_Adaylari" && table.rows.length > 1) {
-        const verdictRules = [
+      if ((table.title === "Kupon_Adaylari" || table.title === "BUGUN_NE_OYNANIR") && table.rows.length > 1) {
+        const verdictColumn = table.title === "BUGUN_NE_OYNANIR" ? 1 : 0;
+        const rowEnd = table.rows.length;
+        const rules = [
           { text: "GÜÇLÜ ADAY", backgroundColor: { red: 0.82, green: 0.94, blue: 0.84 } },
           { text: "İZLE", backgroundColor: { red: 1, green: 0.95, blue: 0.76 } },
           { text: "UZAK DUR", backgroundColor: { red: 0.97, green: 0.82, blue: 0.82 } },
+          { text: "BEKLE", backgroundColor: { red: 0.90, green: 0.90, blue: 0.90 } },
         ];
-        for (const rule of verdictRules) {
+        for (const rule of rules) {
           requests.push({
             addConditionalFormatRule: {
               rule: {
-                ranges: [{ sheetId, startRowIndex: 1, endRowIndex: table.rows.length, startColumnIndex: 0, endColumnIndex: 1 }],
+                ranges: [{
+                  sheetId,
+                  startRowIndex: 1,
+                  endRowIndex: rowEnd,
+                  startColumnIndex: verdictColumn,
+                  endColumnIndex: verdictColumn + 1,
+                }],
                 booleanRule: {
                   condition: { type: "TEXT_EQ", values: [{ userEnteredValue: rule.text }] },
                   format: { backgroundColor: rule.backgroundColor, textFormat: { bold: true } },
