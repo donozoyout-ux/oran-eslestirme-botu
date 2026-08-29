@@ -34,6 +34,28 @@ const BIG_FIVE_SECOND_AND_THIRD_TIERS: Readonly<Record<string, readonly string[]
   france: ["ligue-2", "national"],
 };
 
+const CONTINENTAL_LEAGUES = new Set([
+  "uefa-champions-league",
+  "uefa-europa-league",
+  "uefa-conference-league",
+]);
+
+function slug(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/ı/g, "i")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function countryKey(value: string): string {
+  const normalized = slug(value);
+  if (normalized === "turkiye" || normalized === "turkey") return "turkey";
+  return normalized;
+}
+
 function leaguePath(url: string): { country: string; competition: string } | null {
   try {
     const parts = new URL(url).pathname.split("/").filter(Boolean);
@@ -51,6 +73,18 @@ export function isLeagueInScope(url: string, scope: LeagueScope): boolean {
   const topFlight = TOP_FLIGHT_LEAGUES[path.country] ?? [];
   const lowerBigFive = BIG_FIVE_SECOND_AND_THIRD_TIERS[path.country] ?? [];
   return topFlight.includes(path.competition) || lowerBigFive.includes(path.competition);
+}
+
+/** API tabanlı kaynaklarda URL yerine ülke + lig adı gelir. */
+export function isLeagueLabelInScope(country: string | undefined, competition: string | undefined, scope: LeagueScope): boolean {
+  if (scope === "all") return true;
+  if (!competition) return false;
+  const competitionSlug = slug(competition);
+  if (CONTINENTAL_LEAGUES.has(competitionSlug)) return true;
+  const countrySlug = countryKey(country ?? "");
+  const topFlight = TOP_FLIGHT_LEAGUES[countrySlug] ?? [];
+  const lowerBigFive = BIG_FIVE_SECOND_AND_THIRD_TIERS[countrySlug] ?? [];
+  return topFlight.includes(competitionSlug) || lowerBigFive.includes(competitionSlug);
 }
 
 export function leagueScopeLabel(scope: LeagueScope): string {

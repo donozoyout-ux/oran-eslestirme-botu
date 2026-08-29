@@ -1,6 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiFootballProvider } from "../src/providers/api-football-provider.js";
 
+const commonOptions = {
+  apiKey: "secret",
+  bookmakerKeys: ["bet365"],
+  maxFixtures: 2,
+  fixtureCacheMinutes: 30,
+  prematchCacheMinutes: 120,
+  liveCacheMinutes: 10,
+  dailyRequestBudget: 80,
+  leagueScope: "turkey_europe_top10_big5_tier3" as const,
+  maxLiveEventAgeMinutes: 180,
+};
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -18,7 +30,7 @@ describe("ApiFootballProvider", () => {
           errors: [],
           response: [{
             fixture: { id: 101, date: "2026-08-29T18:00:00+00:00", status: { short: "NS" } },
-            league: { name: "Premier League" },
+            league: { name: "Premier League", country: "England" },
             teams: { home: { name: "Alpha FC" }, away: { name: "Beta FC" } },
           }],
         }), { status: 200, headers });
@@ -45,16 +57,7 @@ describe("ApiFootballProvider", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const provider = new ApiFootballProvider({
-      apiKey: "secret",
-      bookmakerKeys: ["bet365"],
-      maxFixtures: 2,
-      fixtureCacheMinutes: 30,
-      prematchCacheMinutes: 120,
-      liveCacheMinutes: 10,
-      dailyRequestBudget: 80,
-    });
-
+    const provider = new ApiFootballProvider(commonOptions);
     const first = await provider.fetchQuotes();
     const second = await provider.fetchQuotes();
 
@@ -77,23 +80,61 @@ describe("ApiFootballProvider", () => {
       if (url.includes("/fixtures?")) {
         return new Response(JSON.stringify({ errors: [], response: [{
           fixture: { id: 202, date: "2026-08-29T18:00:00+00:00", status: { short: "1H" } },
-          league: { name: "Test League" },
+          league: { name: "Premier League", country: "England" },
           teams: { home: { name: "Home" }, away: { name: "Away" } },
         }] }), { status: 200 });
       }
       return new Response(JSON.stringify({ errors: [], response: [] }), { status: 200 });
     }));
 
-    const provider = new ApiFootballProvider({
-      apiKey: "secret",
-      bookmakerKeys: [],
-      maxFixtures: 1,
-      fixtureCacheMinutes: 30,
-      prematchCacheMinutes: 120,
-      liveCacheMinutes: 10,
-      dailyRequestBudget: 80,
-    });
+    const provider = new ApiFootballProvider({ ...commonOptions, bookmakerKeys: [], maxFixtures: 1 });
     await provider.fetchQuotes();
+    expect(urls.some((url) => url.includes("/fixtures?live=all"))).toBe(true);
     expect(urls.some((url) => url.includes("/odds/live?fixture=202"))).toBe(true);
+  });
+
+  it("30 dakikalik prematch cache surerken mac baslarsa live heartbeat ile canliya gecer", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-29T17:40:00.000Z"));
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("/fixtures?live=all")) {
+        return new Response(JSON.stringify({ errors: [], response: [{
+          fixture: { id: 303, date: "2026-08-29T18:00:00+00:00", status: { short: "1H" } },
+          league: { name: "Premier League", country: "England" },
+          teams: { home: { name: "Alpha" }, away: { name: "Beta" } },
+        }] }), { status: 200 });
+      }
+      if (url.includes("/fixtures?date=")) {
+        return new Response(JSON.stringify({ errors: [], response: [{
+          fixture: { id: 303, date: "2026-08-29T18:00:00+00:00", status: { short: "NS" } },
+          league: { name: "Premier League", country: "England" },
+          teams: { home: { name: "Alpha" }, away: { name: "Beta" } },
+        }] }), { status: 200 });
+      }
+      if (url.includes("/odds/live?fixture=303")) {
+        return new Response(JSON.stringify({ errors: [], response: [] }), { status: 200 });
+      }
+      if (url.includes("/odds?fixture=303")) {
+        return new Response(JSON.stringify({ errors: [], response: [] }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const provider = new ApiFootballProvider({ ...commonOptions, maxFixtures: 1 });
+    await provider.fetchQuotes();
+    expect(urls.some((url) => url.includes("/fixtures?live=all"))).toBe(false);
+
+    vi.advanceTimersByTime(25 * 60_000);
+    await provider.fetchQuotes();
+
+    expect(urls.filter((url) => url.includes("/fixtures?date=")).length).toBe(1);
+    expect(urls.some((url) => url.includes("/fixtures?live=all"))).toBe(true);
+    expect(urls.some((url) => url.includes("/odds/live?fixture=303"))).toBe(true);
+    expect(provider.getLastFixtures()).toEqual([
+      expect.objectContaining({ sourceEventId: "303", phase: "live" }),
+    ]);
   });
 });

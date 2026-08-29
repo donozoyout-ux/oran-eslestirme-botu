@@ -55,6 +55,8 @@ export function createProvider(config: AppConfig): OddsProvider {
       prematchCacheMinutes: config.apiFootballPrematchCacheMinutes,
       liveCacheMinutes: config.apiFootballLiveCacheMinutes,
       dailyRequestBudget: config.apiFootballDailyRequestBudget,
+      leagueScope: config.leagueScope,
+      maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
     }));
   }
 
