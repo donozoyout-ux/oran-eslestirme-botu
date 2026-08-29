@@ -9,6 +9,7 @@ import {
   type BetExplorerCandidate,
   type BetExplorerPageSnapshot,
 } from "../src/providers/betexplorer-scraper-provider.js";
+import { DEFAULT_LEAGUE_SCOPE, isLeagueInScope } from "../src/league-scope.js";
 
 const now = new Date("2026-08-28T10:00:00.000Z");
 
@@ -26,6 +27,16 @@ function candidate(phaseHint: "prematch" | "live"): BetExplorerCandidate {
 }
 
 describe("BetExplorer scraper", () => {
+  it("yalnizca secilen Avrupa liglerini ve ilk bes ulkenin 2-3. liglerini izler", () => {
+    expect(isLeagueInScope("https://www.betexplorer.com/football/turkey/super-lig/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/england/championship/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/spain/primera-rfef-group-1/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/italy/serie-c-group-b/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/portugal/liga-portugal/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/england/league-two/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/china/super-league/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
+  });
+
   it("liste HTML'inden canli ve yaklasan maclari sinirli secer", () => {
     const html = `
       <ul class="table-main__matchInfo" data-live="LIVE0001" data-dt="28,8,2026,12,30" data-dt-now="28,8,2026,12,39">
