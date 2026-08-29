@@ -9,19 +9,16 @@ afterEach(() => {
 
 const sheetMetadata = {
   sheets: [
-    { properties: { sheetId: 1, title: "Pazar_Ozeti" } },
-    { properties: { sheetId: 2, title: "Gol_Alt_Ust" } },
-    { properties: { sheetId: 3, title: "Kornerler" } },
-    { properties: { sheetId: 4, title: "Kartlar" } },
-    { properties: { sheetId: 5, title: "Maclar" } },
-    { properties: { sheetId: 6, title: "Oran_Gecmisi" } },
-    { properties: { sheetId: 7, title: "Sinyaller" } },
+    { properties: { sheetId: 1, title: "Kupon_Adaylari" } },
+    { properties: { sheetId: 2, title: "Pazar_Ozeti" } },
+    { properties: { sheetId: 3, title: "Gol_Alt_Ust" } },
+    { properties: { sheetId: 4, title: "Kornerler" } },
+    { properties: { sheetId: 5, title: "Kartlar" } },
+    { properties: { sheetId: 6, title: "Maclar" } },
+    { properties: { sheetId: 7, title: "Oran_Gecmisi" } },
+    { properties: { sheetId: 8, title: "Sinyaller" } },
   ],
 };
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("Google Sheets aynasi", () => {
   it("Render'daki kacisli veya tum JSON anahtarini PEM olarak kullanir", async () => {
@@ -55,7 +52,7 @@ describe("Google Sheets aynasi", () => {
     );
   });
 
-  it("pazar ozetini ve gol/korner/kart sekmelerini ham veriden uretir", async () => {
+  it("kupon adaylarini ve gol/korner/kart sekmelerini ham veriden uretir", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     let metadataReads = 0;
     const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -86,8 +83,6 @@ describe("Google Sheets aynasi", () => {
       event: "A - B",
       phase: "prematch" as const,
       period: "full_time",
-      bookmakerKey: "book-a",
-      bookmaker: "Book A",
       sourceUpdatedAt: "2026-08-29T12:00:00.000Z",
     };
 
@@ -106,10 +101,11 @@ describe("Google Sheets aynasi", () => {
         },
       ],
       oddsHistory: [
-        { ...base, marketKey: "total_goals", market: "Toplam Gol", selectionKey: "over", selection: "Ust", line: 2.5, price: 2.34 },
-        { ...base, bookmakerKey: "book-b", bookmaker: "Book B", marketKey: "total_goals", market: "Toplam Gol", selectionKey: "over", selection: "Ust", line: 2.5, price: 2.42 },
-        { ...base, marketKey: "corners", market: "Toplam Korner", selectionKey: "over", selection: "Ust", line: 9.5, price: 1.91 },
-        { ...base, marketKey: "cards", market: "Toplam Kart", selectionKey: "under", selection: "Alt", line: 4.5, price: 1.84 },
+        { ...base, bookmakerKey: "book-a", bookmaker: "Book A", marketKey: "total_goals", market: "Toplam Gol", selectionKey: "over", selection: "Ust", line: 2.5, price: 2.00 },
+        { ...base, bookmakerKey: "book-b", bookmaker: "Book B", marketKey: "total_goals", market: "Toplam Gol", selectionKey: "over", selection: "Ust", line: 2.5, price: 2.02 },
+        { ...base, bookmakerKey: "book-c", bookmaker: "Book C", marketKey: "total_goals", market: "Toplam Gol", selectionKey: "over", selection: "Ust", line: 2.5, price: 2.16 },
+        { ...base, bookmakerKey: "book-a", bookmaker: "Book A", marketKey: "corners", market: "Toplam Korner", selectionKey: "over", selection: "Ust", line: 9.5, price: 1.91 },
+        { ...base, bookmakerKey: "book-a", bookmaker: "Book A", marketKey: "cards", market: "Toplam Kart", selectionKey: "under", selection: "Alt", line: 4.5, price: 1.84 },
       ],
       signals: [],
     };
@@ -119,6 +115,7 @@ describe("Google Sheets aynasi", () => {
     const valuesCall = calls.find((call) => call.url.endsWith("values:batchUpdate"));
     const body = JSON.parse(String(valuesCall?.init?.body));
     expect(body.data.map((item: { range: string }) => item.range)).toEqual([
+      "'Kupon_Adaylari'!A1",
       "'Pazar_Ozeti'!A1",
       "'Gol_Alt_Ust'!A1",
       "'Kornerler'!A1",
@@ -128,11 +125,17 @@ describe("Google Sheets aynasi", () => {
       "'Sinyaller'!A1",
     ]);
 
-    expect(body.data[0].values[0]).toContain("En Iyi Oran");
-    expect(body.data[0].values[1][6]).toBe(2.42);
-    expect(body.data[1].values).toHaveLength(3);
-    expect(body.data[2].values[1][2]).toBe("Toplam Korner");
-    expect(body.data[3].values[1][2]).toBe("Toplam Kart");
+    expect(body.data[0].values[0]).toContain("Karar");
+    expect(body.data[0].values[0]).toContain("Piyasa Value %");
+    expect(body.data[0].values[1][0]).toBe("İZLE");
+    expect(body.data[0].values[1][8]).toBe(2.16);
+    expect(body.data[1].values[0]).toContain("En Iyi Oran");
+    expect(body.data[2].values).toHaveLength(4);
+    expect(body.data[3].values[1][2]).toBe("Toplam Korner");
+    expect(body.data[4].values[1][2]).toBe("Toplam Kart");
+
+    const formattingCall = calls.find((call) => call.url.endsWith(":batchUpdate") && String(call.init?.body).includes("addConditionalFormatRule"));
+    expect(formattingCall).toBeDefined();
     expect(mirror.url).toContain("1234567890abcdefghijklmnopqrstuv");
   });
 });
