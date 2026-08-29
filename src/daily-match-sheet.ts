@@ -234,7 +234,20 @@ export class JsonDailyMatchSheet {
   }
 
   private mergeFixtures(fixtures: MatchFixture[], quotes: OddsQuote[]): void {
-    const merged = new Map(this.state.fixtures.map((fixture) => [fixture.sourceEventId, fixture]));
+    // getLastFixtures tam gunluk katalogtur. Ayni saglayicinin artik bu
+    // katalogda olmayan maclarini kaldirarak filtre degisikliginin panel ve
+    // Google Sheet'e hemen yansimasini saglariz.
+    const currentIdsByProvider = new Map<string, Set<string>>();
+    for (const fixture of fixtures) {
+      const ids = currentIdsByProvider.get(fixture.provider) ?? new Set<string>();
+      ids.add(fixture.sourceEventId);
+      currentIdsByProvider.set(fixture.provider, ids);
+    }
+    const retained = this.state.fixtures.filter((fixture) => {
+      const currentIds = currentIdsByProvider.get(fixture.provider);
+      return !currentIds || currentIds.has(fixture.sourceEventId);
+    });
+    const merged = new Map(retained.map((fixture) => [fixture.sourceEventId, fixture]));
     for (const fixture of fixtures) merged.set(fixture.sourceEventId, { ...merged.get(fixture.sourceEventId), ...fixture });
     for (const quote of quotes) {
       const existing = merged.get(quote.sourceEventId);
