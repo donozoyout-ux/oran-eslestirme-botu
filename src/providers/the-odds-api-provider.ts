@@ -1,4 +1,4 @@
-import type { EventPhase, MarketKey, OddsProvider, OddsQuote } from "../domain.js";
+import type { EventPhase, MarketKey, MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
 
 interface ApiOutcome {
   name: string;
@@ -69,6 +69,7 @@ export class TheOddsApiProvider implements OddsProvider {
   readonly name = "the_odds_api";
   private readonly baseUrl: string;
   private readonly requestTimeoutMs: number;
+  private lastFixtures: MatchFixture[] = [];
 
   constructor(private readonly options: TheOddsApiProviderOptions) {
     this.baseUrl = options.baseUrl ?? "https://api.the-odds-api.com/v4";
@@ -77,7 +78,26 @@ export class TheOddsApiProvider implements OddsProvider {
 
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const results = await Promise.all(this.options.sportKeys.map((key) => this.fetchSport(key, signal)));
-    return results.flat();
+    const quotes = results.flat();
+    const fixtures = new Map<string, MatchFixture>();
+    for (const quote of quotes) {
+      fixtures.set(quote.sourceEventId, {
+        provider: quote.provider,
+        sourceEventId: quote.sourceEventId,
+        leagueName: quote.leagueName,
+        homeTeam: quote.homeTeam,
+        awayTeam: quote.awayTeam,
+        commenceTime: quote.commenceTime,
+        phase: quote.phase,
+        sourceUrl: quote.sourceUrl,
+      });
+    }
+    this.lastFixtures = [...fixtures.values()];
+    return quotes;
+  }
+
+  getLastFixtures(): MatchFixture[] {
+    return [...this.lastFixtures];
   }
 
   private async fetchSport(sportKey: string, externalSignal?: AbortSignal): Promise<OddsQuote[]> {
