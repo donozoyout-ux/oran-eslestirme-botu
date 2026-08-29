@@ -1,5 +1,5 @@
 import { createSign } from "node:crypto";
-import type { DailySheetDataset, DailySheetMirror } from "./daily-match-sheet.js";
+import type { DailySheetDataset, DailySheetMirror, OddsHistoryEntry } from "./daily-match-sheet.js";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
@@ -41,21 +41,14 @@ function spreadsheetId(value: string): string {
   return result;
 }
 
-/**
- * Render's environment editor accepts both literal `\\n` characters and real
- * line breaks. It is also common to paste either a JSON string or the whole
- * downloaded Google service-account JSON file by mistake. Normalize those
- * safe variants here so the OAuth signer always receives a PEM value.
- */
 function normalizePrivateKey(value: string): string {
   let candidate = value.trim();
-
   if (candidate.startsWith("{")) {
     try {
       const parsed = JSON.parse(candidate) as { private_key?: unknown };
       if (typeof parsed.private_key === "string") candidate = parsed.private_key;
     } catch {
-      // Leave it unchanged; the validation below provides a useful error.
+      // Validation below will explain the problem.
     }
   } else if (candidate.startsWith('"') && candidate.endsWith('"')) {
     try {
@@ -85,6 +78,92 @@ function safeValue(value: unknown): SheetValue {
   if (typeof value === "number" || typeof value === "boolean") return value;
   const text = String(value);
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function latestHistory(entries: OddsHistoryEntry[]): OddsHistoryEntry[] {
+  const latest = new Map<string, OddsHistoryEntry>();
+  for (const entry of entries) {
+    const key = [entry.sourceEventId, entry.marketKey, entry.period, entry.selectionKey, entry.line ?? "", entry.bookmakerKey].join("|");
+    const existing = latest.get(key);
+    if (!existing || Date.parse(entry.capturedAt) >= Date.parse(existing.capturedAt)) latest.set(key, entry);
+  }
+  return [...latest.values()].sort((a, b) => a.event.localeCompare(b.event) || a.market.localeCompare(b.market));
+}
+
+function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetValue[][] {
+  const rows: SheetValue[][] = [[
+    "Mac",
+    "Durum",
+    "Pazar",
+    "Periyot",
+    "Secim",
+    "Cizgi",
+    "Bookmaker",
+    "Oran",
+    "Kayit Saati",
+  ]];
+  for (const entry of latestHistory(entries).filter((item) => marketKeys.includes(item.marketKey))) {
+    rows.push([
+      entry.event,
+      entry.phase,
+      entry.market,
+      entry.period,
+      entry.selection,
+      entry.line ?? "",
+      entry.bookmaker,
+      entry.price,
+      entry.capturedAt,
+    ].map(safeValue));
+  }
+  return rows;
+}
+
+function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+  const groups = new Map<string, OddsHistoryEntry[]>();
+  for (const entry of latestHistory(entries)) {
+    const key = [entry.sourceEventId, entry.marketKey, entry.period, entry.selectionKey, entry.line ?? ""].join("|");
+    const list = groups.get(key) ?? [];
+    list.push(entry);
+    groups.set(key, list);
+  }
+
+  const rows: SheetValue[][] = [[
+    "Mac",
+    "Durum",
+    "Pazar",
+    "Periyot",
+    "Secim",
+    "Cizgi",
+    "En Iyi Oran",
+    "En Iyi Bookmaker",
+    "Ortalama Oran",
+    "Kaynak Sayisi",
+    "Min Oran",
+    "Max Oran",
+  ]];
+
+  for (const list of groups.values()) {
+    const first = list[0]!;
+    const prices = list.map((item) => item.price).filter(Number.isFinite);
+    if (prices.length === 0) continue;
+    const best = [...list].sort((a, b) => b.price - a.price)[0]!;
+    const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+    rows.push([
+      first.event,
+      first.phase,
+      first.market,
+      first.period,
+      first.selection,
+      first.line ?? "",
+      Number(best.price.toFixed(3)),
+      best.bookmaker,
+      Number(avg.toFixed(3)),
+      list.length,
+      Number(Math.min(...prices).toFixed(3)),
+      Number(Math.max(...prices).toFixed(3)),
+    ].map(safeValue));
+  }
+  return rows;
 }
 
 function tableRows(dataset: DailySheetDataset): SheetTable[] {
@@ -170,6 +249,10 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   }
 
   return [
+    { title: "Pazar_Ozeti", rows: marketSummaryRows(dataset.oddsHistory), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
+    { title: "Gol_Alt_Ust", rows: marketRows(dataset.oddsHistory, ["total_goals", "both_teams_to_score"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
+    { title: "Kornerler", rows: marketRows(dataset.oddsHistory, ["corners"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
+    { title: "Kartlar", rows: marketRows(dataset.oddsHistory, ["cards"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
     { title: "Maclar", rows: fixtures, columnWidths: [105, 115, 175, 165, 165, 155, 105, 165, 165, 280] },
     { title: "Oran_Gecmisi", rows: history, columnWidths: [165, 115, 230, 100, 145, 110, 135, 80, 145, 85, 175] },
     { title: "Sinyaller", rows: signals, columnWidths: [165, 115, 230, 145, 135, 80, 350, 165, 245] },
@@ -218,22 +301,20 @@ export class GoogleSheetsMirror implements DailySheetMirror {
     if (this.cachedToken && this.cachedToken.expiresAt > now) return this.cachedToken.value;
     const issuedAt = Math.floor(now / 1000);
     const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-    const payload = base64Url(
-      JSON.stringify({
-        iss: this.options.serviceAccountEmail,
-        scope: SHEETS_SCOPE,
-        aud: TOKEN_URL,
-        iat: issuedAt,
-        exp: issuedAt + 3_600,
-      }),
-    );
+    const payload = base64Url(JSON.stringify({
+      iss: this.options.serviceAccountEmail,
+      scope: SHEETS_SCOPE,
+      aud: TOKEN_URL,
+      iat: issuedAt,
+      exp: issuedAt + 3_600,
+    }));
     const unsigned = `${header}.${payload}`;
     const signer = createSign("RSA-SHA256");
     signer.update(unsigned);
     signer.end();
     const assertion = `${unsigned}.${base64Url(signer.sign(this.privateKey))}`;
     const body = new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      grant_type: "urn:ietf:params:oauth2:grant-type:jwt-bearer",
       assertion,
     });
     const response = await fetch(TOKEN_URL, {
