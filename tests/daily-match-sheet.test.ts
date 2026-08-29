@@ -41,6 +41,33 @@ function quote(price: number, updatedAt: string, commenceTime: string): OddsQuot
 }
 
 describe("gunluk mac tablosu", () => {
+  it("saglayicinin guncel fikstur katalogundan cikan maclari listeden kaldirir", async () => {
+    const sheet = createSheet();
+    const now = new Date();
+    const commenceTime = new Date(now.getTime() + 3_600_000).toISOString();
+    const kept: MatchFixture = {
+      provider: "test",
+      sourceEventId: "event-1",
+      leagueName: "Izlenen Lig",
+      homeTeam: "A",
+      awayTeam: "B",
+      commenceTime,
+      phase: "prematch",
+    };
+    const removed: MatchFixture = {
+      ...kept,
+      sourceEventId: "event-2",
+      leagueName: "Filtre Disi Lig",
+      homeTeam: "C",
+      awayTeam: "D",
+    };
+
+    await sheet.record([kept, removed], [], [], now);
+    await sheet.record([kept], [], [], new Date(now.getTime() + 60_000));
+
+    expect(sheet.getSnapshot().fixtures.map((fixture) => fixture.sourceEventId)).toEqual(["event-1"]);
+  });
+
   it("fiksturu ve oran gecmisini saklar, yuzde 8 hareketi sinyale cevirir", async () => {
     const sheet = createSheet();
     const secondCapture = new Date();
