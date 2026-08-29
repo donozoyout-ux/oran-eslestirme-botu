@@ -2,6 +2,7 @@ import type { AlertStore, Notifier, OddsProvider, RunSummary } from "./domain.js
 import { findOddsMatches } from "./comparison-engine.js";
 import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { errorMessage, logger } from "./logger.js";
+import { analyzeOddsMarket, type ArbitrageOpportunity, type SelectionConsensus } from "./market-analysis-engine.js";
 
 export interface MonitorOptions {
   tolerancePercent: number;
@@ -41,6 +42,10 @@ export interface MonitorStatus {
     differencePercent: number;
     detectedAt: string;
   }>;
+  marketAnalysis: {
+    consensus: SelectionConsensus[];
+    arbitrage: ArbitrageOpportunity[];
+  };
   dailySheet: DailySheetSnapshot;
   totals: {
     runs: number;
@@ -73,6 +78,7 @@ export class OddsMonitor {
       lastRun: null,
       recentQuotes: [],
       recentMatches: [],
+      marketAnalysis: { consensus: [], arbitrage: [] },
       dailySheet: dailySheet.getSnapshot(),
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     };
@@ -135,8 +141,15 @@ export class OddsMonitor {
         },
         comparisonTime,
       );
+      const marketAnalysis = analyzeOddsMarket(comparison.freshQuotes, {}, comparisonTime);
+      this.statusValue.marketAnalysis = {
+        consensus: marketAnalysis.consensus.slice(0, 50),
+        arbitrage: marketAnalysis.arbitrage.slice(0, 20),
+      };
+
       let alertsSent = 0;
       let movementAlertsSent = 0;
+      let marketAnalysisAlertsSent = 0;
       let alertsSuppressed = 0;
       try {
         const sheetResult = await this.dailySheet.record(
@@ -161,12 +174,34 @@ export class OddsMonitor {
               });
             }
           }
-          this.statusValue.dailySheet = this.dailySheet.getSnapshot();
         }
       } catch (error) {
         this.statusValue.totals.errors += 1;
         logger.warn("Gunluk mac tablosu kaydedilemedi.", { error: errorMessage(error) });
       }
+
+      if (this.notifier.sendAnalysisSignal) {
+        for (const signal of marketAnalysis.alertSignals) {
+          const now = new Date();
+          if (!this.alertStore.shouldSend(signal.id, now)) {
+            alertsSuppressed += 1;
+            continue;
+          }
+          try {
+            await this.notifier.sendAnalysisSignal(signal);
+            await this.alertStore.markSent(signal.id, now);
+            alertsSent += 1;
+            marketAnalysisAlertsSent += 1;
+          } catch (error) {
+            this.statusValue.totals.errors += 1;
+            logger.error("Piyasa analizi bildirimi gonderilemedi.", {
+              signalId: signal.id,
+              error: errorMessage(error),
+            });
+          }
+        }
+      }
+
       for (const match of comparison.matches) {
         const now = new Date();
         if (!this.alertStore.shouldSend(match.id, now)) {
@@ -192,6 +227,9 @@ export class OddsMonitor {
         matchesFound: comparison.matches.length,
         alertsSent,
         movementAlertsSent,
+        marketAnalysisAlertsSent,
+        consensusSignalsFound: marketAnalysis.consensus.length,
+        arbitrageFound: marketAnalysis.arbitrage.length,
         alertsSuppressed,
       };
       this.statusValue.lastRun = summary;
