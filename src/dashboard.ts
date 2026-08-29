@@ -6,342 +6,74 @@ export const dashboardHtml = String.raw`<!doctype html>
   <meta name="theme-color" content="#07111f">
   <title>Oran Eşleştirme Botu</title>
   <style>
-    :root {
-      color-scheme: dark;
-      --bg: #07111f;
-      --panel: rgba(15, 29, 48, .82);
-      --panel-2: rgba(19, 38, 62, .72);
-      --line: rgba(148, 181, 214, .16);
-      --text: #f4f8fc;
-      --muted: #92a8bd;
-      --cyan: #53d7ff;
-      --green: #53e6a5;
-      --amber: #ffcf70;
-      --red: #ff7b87;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--text);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at 12% 0%, rgba(42, 137, 198, .2), transparent 32rem),
-        radial-gradient(circle at 90% 10%, rgba(48, 212, 160, .11), transparent 28rem),
-        var(--bg);
-    }
-    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 56px; }
-    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-    .eyebrow { margin: 0 0 8px; color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
-    h1 { margin: 0; font-size: clamp(28px, 5vw, 48px); letter-spacing: -.045em; line-height: 1.02; }
-    .intro { max-width: 680px; margin: 13px 0 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
-    .live { display: inline-flex; align-items: center; gap: 9px; flex: none; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px; background: rgba(6, 15, 27, .7); color: var(--muted); font-size: 13px; font-weight: 700; }
-    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 5px rgba(255, 207, 112, .09); }
-    .live.ok .dot { background: var(--green); box-shadow: 0 0 0 5px rgba(83, 230, 165, .09); }
-    .live.bad .dot { background: var(--red); box-shadow: 0 0 0 5px rgba(255, 123, 135, .09); }
-    .alerts { display: grid; gap: 10px; margin-bottom: 18px; }
-    .notice { display: none; padding: 14px 16px; border: 1px solid rgba(255, 207, 112, .25); border-radius: 14px; background: rgba(255, 207, 112, .08); color: #ffe4a7; font-size: 13px; line-height: 1.55; }
-    .notice.show { display: block; }
-    .notice.error { border-color: rgba(255, 123, 135, .28); background: rgba(255, 123, 135, .08); color: #ffc1c7; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-    .card, .section { border: 1px solid var(--line); background: var(--panel); box-shadow: 0 18px 48px rgba(0, 0, 0, .18); backdrop-filter: blur(16px); }
-    .card { min-height: 152px; padding: 21px; border-radius: 18px; }
-    .label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
-    .icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: var(--cyan); background: rgba(83, 215, 255, .08); font-size: 14px; }
-    .metric { margin-top: 28px; font-size: clamp(25px, 3vw, 35px); font-weight: 800; letter-spacing: -.04em; }
-    .sub { margin-top: 5px; color: var(--muted); font-size: 12px; }
-    .lower { display: grid; grid-template-columns: 1.35fr .65fr; gap: 14px; margin-top: 14px; }
-    .section { border-radius: 18px; overflow: hidden; }
-    .section-head { display: flex; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
-    .section-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .download { color: var(--cyan); font-size: 12px; font-weight: 750; text-decoration: none; }
-    .download:hover { text-decoration: underline; }
-    h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
-    .updated { color: var(--muted); font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 16px 22px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
-    tr:last-child td { border-bottom: 0; }
-    th { color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-    td:last-child { text-align: right; font-weight: 720; }
-    .state-list { padding: 8px 22px; }
-    .state-row { display: flex; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-    .state-row:last-child { border-bottom: 0; }
-    .state-row span:first-child { color: var(--muted); }
-    .state-row span:last-child { text-align: right; font-weight: 680; }
-    .state-row a { color: var(--cyan); text-decoration: none; }
-    .state-row a:hover { text-decoration: underline; }
-    footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 18px; color: #71879d; font-size: 11px; }
-    @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } .lower { grid-template-columns: 1fr; } }
-    @media (max-width: 560px) { .shell { width: min(100% - 22px, 1180px); padding-top: 24px; } header { display: block; } .live { margin-top: 18px; } .grid { grid-template-columns: 1fr; } .card { min-height: 132px; } .metric { margin-top: 20px; } th, td { padding: 14px; } footer { display: block; line-height: 1.8; } }
+    :root { color-scheme: dark; --bg:#07111f; --panel:rgba(13,27,46,.88); --line:rgba(166,199,229,.14); --text:#f7fbff; --muted:#9aafc4; --cyan:#64ddff; --cyan-soft:rgba(100,221,255,.12); --green:#5ee7af; --green-soft:rgba(94,231,175,.12); --amber:#ffd17a; --amber-soft:rgba(255,209,122,.12); --red:#ff8590; --red-soft:rgba(255,133,144,.12); --radius:18px; }
+    * { box-sizing:border-box; } html { scroll-behavior:smooth; }
+    body { margin:0; min-width:320px; color:var(--text); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:radial-gradient(circle at 8% -5%,rgba(38,150,224,.22),transparent 33rem),radial-gradient(circle at 100% 12%,rgba(52,214,163,.12),transparent 30rem),linear-gradient(160deg,#07111f 0%,#07111f 55%,#081827 100%); }
+    button,a { font:inherit; } .shell { width:min(1340px,calc(100% - 36px)); margin:0 auto; padding:26px 0 58px; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:18px; padding-bottom:25px; }
+    .brand { display:flex; align-items:center; gap:11px; color:var(--text); text-decoration:none; font-size:14px; font-weight:780; letter-spacing:-.01em; }
+    .brand-mark { display:grid; place-items:center; width:32px; height:32px; border-radius:10px; color:#061420; background:linear-gradient(135deg,var(--cyan),#76edbd); box-shadow:0 8px 24px rgba(78,207,219,.22); font-size:17px; }
+    .top-links { display:flex; align-items:center; gap:10px; } .top-link { color:var(--muted); text-decoration:none; font-size:12px; font-weight:720; } .top-link:hover { color:var(--cyan); }
+    .connection { display:inline-flex; align-items:center; gap:8px; min-height:34px; padding:8px 11px; border:1px solid var(--line); border-radius:999px; color:var(--muted); background:rgba(4,14,25,.55); font-size:12px; font-weight:760; }
+    .dot { width:8px; height:8px; border-radius:99px; background:var(--amber); box-shadow:0 0 0 4px rgba(255,209,122,.1); } .connection.ok .dot { background:var(--green); box-shadow:0 0 0 4px rgba(94,231,175,.1); } .connection.bad .dot { background:var(--red); box-shadow:0 0 0 4px rgba(255,133,144,.1); }
+    .hero { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(290px,.55fr); gap:18px; padding:clamp(24px,4vw,46px); border:1px solid var(--line); border-radius:26px; overflow:hidden; background:linear-gradient(125deg,rgba(21,53,83,.95),rgba(9,28,47,.91) 62%,rgba(13,48,51,.82)); box-shadow:0 24px 70px rgba(0,0,0,.2); position:relative; }
+    .hero::after { content:""; position:absolute; right:-100px; bottom:-140px; width:350px; height:350px; border:1px solid rgba(100,221,255,.13); border-radius:50%; box-shadow:0 0 0 42px rgba(100,221,255,.03),0 0 0 88px rgba(100,221,255,.02); pointer-events:none; }
+    .eyebrow { margin:0 0 10px; color:var(--cyan); font-size:11px; font-weight:850; letter-spacing:.17em; text-transform:uppercase; } h1 { max-width:750px; margin:0; font-size:clamp(31px,5vw,54px); line-height:1.01; letter-spacing:-.055em; }
+    .intro { max-width:720px; margin:15px 0 0; color:#b7c9d8; font-size:15px; line-height:1.7; } .rule-row { display:flex; flex-wrap:wrap; gap:9px; margin-top:23px; } .rule { display:inline-flex; align-items:center; gap:7px; padding:8px 10px; border:1px solid rgba(180,217,242,.14); border-radius:10px; color:#c8d7e4; background:rgba(5,20,35,.35); font-size:12px; font-weight:680; } .rule b { color:var(--green); }
+    .hero-side { position:relative; z-index:1; display:flex; flex-direction:column; justify-content:space-between; gap:25px; padding:19px; border:1px solid rgba(187,222,247,.13); border-radius:17px; background:rgba(3,15,28,.31); } .side-label { color:var(--muted); font-size:11px; font-weight:790; letter-spacing:.1em; text-transform:uppercase; } .run-time { margin-top:9px; font-size:21px; font-weight:780; letter-spacing:-.035em; } .run-sub { margin-top:5px; color:var(--muted); font-size:12px; line-height:1.45; }
+    .refresh { display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; min-height:42px; border:1px solid rgba(100,221,255,.35); border-radius:11px; color:#e6fbff; background:var(--cyan-soft); cursor:pointer; font-size:13px; font-weight:780; transition:transform .18s ease,background .18s ease; } .refresh:hover { background:rgba(100,221,255,.2); transform:translateY(-1px); } .refresh:focus-visible,.filter:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; } .refresh[disabled] { cursor:wait; opacity:.7; transform:none; }
+    .spin { display:none; width:12px; height:12px; border:2px solid rgba(230,251,255,.35); border-top-color:#e6fbff; border-radius:50%; animation:spin .7s linear infinite; } .refresh.loading .spin { display:inline-block; } @keyframes spin { to { transform:rotate(360deg); } }
+    .notice-stack { display:grid; gap:10px; margin-top:16px; } .notice { display:none; align-items:flex-start; gap:10px; padding:13px 15px; border:1px solid rgba(255,209,122,.25); border-radius:13px; color:#ffe7b4; background:var(--amber-soft); font-size:13px; line-height:1.5; } .notice::before { content:"!"; display:grid; place-items:center; flex:none; width:18px; height:18px; border-radius:50%; color:#302007; background:var(--amber); font-size:12px; font-weight:900; } .notice.show { display:flex; } .notice.error { border-color:rgba(255,133,144,.27); color:#ffcad0; background:var(--red-soft); } .notice.error::before { color:#3b0b10; background:var(--red); }
+    .metrics { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; margin-top:17px; } .metric-card { min-height:142px; padding:17px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); box-shadow:0 14px 35px rgba(0,0,0,.12); } .metric-head { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:10px; font-weight:830; letter-spacing:.1em; text-transform:uppercase; } .metric-icon { display:grid; place-items:center; width:27px; height:27px; border-radius:8px; color:var(--cyan); background:var(--cyan-soft); font-size:14px; } .metric { margin-top:23px; overflow:hidden; text-overflow:ellipsis; font-size:clamp(23px,2.2vw,33px); font-weight:820; letter-spacing:-.05em; white-space:nowrap; } .metric.compact { font-size:clamp(18px,1.8vw,25px); } .metric-sub { min-height:17px; margin-top:5px; overflow:hidden; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+    .content-grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(280px,.7fr); gap:14px; margin-top:14px; } .section { border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--panel); box-shadow:0 14px 40px rgba(0,0,0,.1); } .section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:19px 21px; border-bottom:1px solid var(--line); } h2 { margin:0; font-size:16px; letter-spacing:-.025em; } .section-kicker { margin:4px 0 0; color:var(--muted); font-size:12px; line-height:1.4; } .section-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap; } .download { color:var(--cyan); font-size:12px; font-weight:760; text-decoration:none; white-space:nowrap; } .download:hover { text-decoration:underline; } .updated { color:var(--muted); font-size:11px; white-space:nowrap; }
+    .filter-row { display:flex; align-items:center; gap:6px; margin:14px 21px 4px; } .filter { min-height:31px; padding:0 10px; border:1px solid transparent; border-radius:9px; color:var(--muted); background:transparent; cursor:pointer; font-size:11px; font-weight:780; } .filter:hover { color:var(--text); background:rgba(148,181,214,.07); } .filter.active { border-color:rgba(100,221,255,.24); color:var(--cyan); background:var(--cyan-soft); }
+    .table-wrap { overflow-x:auto; } table { width:100%; border-collapse:collapse; } th,td { padding:14px 21px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; font-size:12px; } th { color:#7f97ad; font-size:10px; font-weight:820; letter-spacing:.09em; text-transform:uppercase; } td { color:#e0ebf3; } tbody tr { transition:background .16s ease; } tbody tr:hover { background:rgba(133,190,230,.045); } tbody tr:last-child td { border-bottom:0; }
+    .event { display:block; min-width:180px; color:var(--text); font-weight:740; } .secondary { display:block; max-width:260px; overflow:hidden; margin-top:3px; color:var(--muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; } .phase { display:inline-flex; align-items:center; gap:5px; padding:5px 7px; border:1px solid rgba(138,184,217,.15); border-radius:7px; color:#b7ccdb; background:rgba(103,151,185,.08); font-size:10px; font-weight:820; letter-spacing:.04em; } .phase.live { border-color:rgba(94,231,175,.2); color:var(--green); background:var(--green-soft); } .phase.live::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; } .diff { display:inline-flex; padding:6px 8px; border-radius:8px; color:var(--green); background:var(--green-soft); font-size:11px; font-weight:850; } .price { color:var(--cyan); font-size:14px; font-weight:830; } .empty { padding:34px 21px 38px; color:var(--muted); text-align:center; font-size:13px; line-height:1.55; }
+    .signal-list { display:grid; } .signal { display:grid; grid-template-columns:auto minmax(0,1fr); gap:11px; padding:15px 18px; border-bottom:1px solid var(--line); } .signal:last-child { border-bottom:0; } .signal-badge { display:grid; place-items:center; width:31px; height:31px; border-radius:10px; color:var(--cyan); background:var(--cyan-soft); font-size:13px; font-weight:900; } .signal-badge.drop { color:var(--amber); background:var(--amber-soft); } .signal-badge.rise { color:var(--green); background:var(--green-soft); } .signal-title { overflow:hidden; color:var(--text); font-size:12px; font-weight:760; text-overflow:ellipsis; white-space:nowrap; } .signal-detail { display:-webkit-box; margin-top:3px; overflow:hidden; color:var(--muted); font-size:11px; line-height:1.45; -webkit-line-clamp:2; -webkit-box-orient:vertical; } .signal-time { margin-top:5px; color:#7790a6; font-size:10px; }
+    .status-list { padding:7px 19px; } .status-row { display:flex; justify-content:space-between; gap:14px; padding:13px 0; border-bottom:1px solid var(--line); font-size:12px; } .status-row:last-child { border-bottom:0; } .status-row span:first-child { color:var(--muted); } .status-row span:last-child { max-width:58%; overflow:hidden; color:#e4eef5; font-weight:720; text-align:right; text-overflow:ellipsis; white-space:nowrap; } .status-row a { color:var(--cyan); text-decoration:none; } .status-row a:hover { text-decoration:underline; }
+    .lower { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,.8fr); gap:14px; margin-top:14px; } footer { display:flex; justify-content:space-between; gap:20px; margin-top:18px; color:#70879c; font-size:11px; line-height:1.55; }
+    @media (max-width:1170px) { .metrics { grid-template-columns:repeat(3,1fr); } } @media (max-width:900px) { .hero,.content-grid,.lower { grid-template-columns:1fr; } .hero-side { min-height:155px; } } @media (max-width:620px) { .shell { width:min(100% - 22px,1340px); padding-top:16px; } .topbar { padding-bottom:18px; } .top-links .top-link { display:none; } .hero { padding:23px; border-radius:20px; } .intro { font-size:14px; } .metrics { grid-template-columns:repeat(2,1fr); gap:9px; } .metric-card { min-height:126px; padding:14px; } .metric { margin-top:18px; } .section-head { padding:17px; } .filter-row { margin-left:17px; } th,td { padding:13px 15px; } footer { display:block; } footer span + span { display:block; margin-top:5px; } }
   </style>
 </head>
 <body>
   <main class="shell">
-    <header>
-      <div>
-        <p class="eyebrow">Canlı İzleme Paneli</p>
-        <h1>Oran Eşleştirme Botu</h1>
-        <p class="intro">Günün maçlarını planlar, maç saatine göre oran geçmişini toplar ve aynı pazardaki oranlar birbirine %2 yaklaştığında Telegram bildirimi gönderir.</p>
-      </div>
-      <div id="live" class="live"><span class="dot"></span><span id="liveText">Bağlanıyor</span></div>
-    </header>
-
-    <div class="alerts">
-      <div id="demoNotice" class="notice">Demo veri modu açık. Gerçek oranlar için Render ortamında veri sağlayıcısı ve API anahtarı tanımlanmalı.</div>
-      <div id="telegramNotice" class="notice">Telegram şu anda kapalı. Render ortamında yeni bot anahtarı tanımlanıp <b>DRY_RUN=false</b> yapılmalı.</div>
-      <div id="errorNotice" class="notice error"></div>
-    </div>
-
-    <section class="grid" aria-label="Özet metrikler">
-      <article class="card"><div class="label">Veri Kaynağı <span class="icon">◆</span></div><div id="provider" class="metric">—</div><div id="providerSub" class="sub">Yükleniyor</div></article>
-      <article class="card"><div class="label">Taranan Oran <span class="icon">↻</span></div><div id="quotes" class="metric">—</div><div class="sub">Son taramadaki güncel oranlar</div></article>
-      <article class="card"><div class="label">Yakın Eşleşme <span class="icon">≈</span></div><div id="matches" class="metric">—</div><div class="sub">%2 sınırının içindeki pazarlar</div></article>
-      <article class="card"><div class="label">Bildirim <span class="icon">↗</span></div><div id="alertsSent" class="metric">—</div><div id="notifierSub" class="sub">Toplam gönderilen</div></article>
-      <article class="card"><div class="label">Günün Maçı <span class="icon">▦</span></div><div id="fixtureCount" class="metric">—</div><div class="sub">Bugünkü planlanan karşılaşmalar</div></article>
-      <article class="card"><div class="label">Analiz Sinyali <span class="icon">⌁</span></div><div id="signalCount" class="metric">—</div><div class="sub">Yakın oran ve oran hareketi</div></article>
+    <nav class="topbar" aria-label="Panel menüsü"><a class="brand" href="/"><span class="brand-mark">≈</span><span>Oran Eşleştirme</span></a><div class="top-links"><a class="top-link" href="#maclar">Günün maçları</a><a class="top-link" href="#eslesmeler">Eşleşmeler</a><div id="live" class="connection"><span class="dot"></span><span id="liveText">Bağlanıyor</span></div></div></nav>
+    <section class="hero" aria-labelledby="page-title"><div><p class="eyebrow">Canlı oran izleme merkezi</p><h1 id="page-title">Oranlar yaklaştığında ilk sen gör.</h1><p class="intro">Günün maçları maç saatine göre izlenir. Aynı maç, pazar ve seçimdeki oranlar birbirine yaklaştığında Telegram için sinyal hazırlanır.</p><div class="rule-row" aria-label="İzleme kuralları"><span class="rule"><b>%2</b> en yüksek oran farkı</span><span class="rule">Maç önü + canlı</span><span class="rule">Futbol pazarları</span></div></div><aside class="hero-side" aria-label="Son tarama özeti"><div><div class="side-label">Son veri alımı</div><div id="heroUpdated" class="run-time">Bağlanıyor</div><div id="heroSub" class="run-sub">İlk tarama tamamlandığında burada görünür.</div></div><button id="refreshButton" class="refresh" type="button"><span class="spin"></span><span id="refreshText">Durumu yenile</span></button></aside></section>
+    <div class="notice-stack" aria-live="polite"><div id="demoNotice" class="notice">Demo veri modu açık. Gerçek oranlar için Render ortamında veri sağlayıcısı ve API anahtarı tanımlanmalı.</div><div id="telegramNotice" class="notice">Telegram şu anda kapalı. Render ortamında bot anahtarı tanımlanıp <b>DRY_RUN=false</b> yapılmalı.</div><div id="errorNotice" class="notice error"></div></div>
+    <section class="metrics" aria-label="Anlık özet">
+      <article class="metric-card"><div class="metric-head">Veri kaynağı <span class="metric-icon">◆</span></div><div id="provider" class="metric compact">—</div><div id="providerSub" class="metric-sub">Yükleniyor</div></article>
+      <article class="metric-card"><div class="metric-head">Güncel oran <span class="metric-icon">↻</span></div><div id="quotes" class="metric">—</div><div class="metric-sub">Son turda kabul edilen</div></article>
+      <article class="metric-card"><div class="metric-head">Yakın eşleşme <span class="metric-icon">≈</span></div><div id="matches" class="metric">—</div><div class="metric-sub">%2 sınırı içindeki pazar</div></article>
+      <article class="metric-card"><div class="metric-head">Analiz sinyali <span class="metric-icon">⌁</span></div><div id="signalCount" class="metric">—</div><div class="metric-sub">Yakın oran ve hareket</div></article>
+      <article class="metric-card"><div class="metric-head">Günün maçı <span class="metric-icon">▦</span></div><div id="fixtureCount" class="metric">—</div><div id="fixtureSub" class="metric-sub">Planlanan karşılaşmalar</div></article>
+      <article class="metric-card"><div class="metric-head">Bildirim <span class="metric-icon">↗</span></div><div id="alertsSent" class="metric">—</div><div id="notifierSub" class="metric-sub">Toplam gönderilen</div></article>
     </section>
-    <section class="section" style="margin-top:14px">
-      <div class="section-head">
-        <h2>Günün maçları ve kontrol planı</h2>
-        <div class="section-actions"><span id="sheetDate" class="updated">—</span><a class="download" href="/daily-matches.csv">Maçları indir</a><a class="download" href="/odds-history.csv">Oran geçmişini indir</a></div>
-      </div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr><th>Maç</th><th>Lig</th><th>Başlangıç</th><th>Durum</th><th>Son kontrol</th><th>Sonraki kontrol</th></tr></thead>
-          <tbody id="dailyFixtures"><tr><td colspan="6">Günün maç listesi hazırlanıyor.</td></tr></tbody>
-        </table>
-      </div>
-    </section>
-    <section class="section" style="margin-top:14px">
-      <div class="section-head"><h2>Son analiz sinyalleri</h2><span class="updated">%2 yakın oran ve %8 hareket</span></div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr><th>Maç</th><th>Pazar / Seçim</th><th>Sinyal</th><th>Açıklama</th><th>Saat</th></tr></thead>
-          <tbody id="recentSignals"><tr><td colspan="5">Henüz analiz sinyali oluşmadı.</td></tr></tbody>
-        </table>
-      </div>
-    </section>
-    <section class="section" style="margin-top:14px">
-      <div class="section-head"><h2>Son okunan gerçek oranlar</h2><span class="updated">En fazla 40 kayıt</span></div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr><th>Maç</th><th>Durum</th><th>Pazar / Seçim</th><th>Bookmaker</th><th>Oran</th></tr></thead>
-          <tbody id="recentQuotes"><tr><td colspan="5">İlk gerçek tarama bekleniyor.</td></tr></tbody>
-        </table>
-      </div>
-    </section>
-    <section class="section" style="margin-top:14px">
-      <div class="section-head"><h2>Son yakın oranlar</h2><span class="updated">En fazla 20 eşleşme</span></div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr><th>Maç</th><th>Durum</th><th>Pazar / Seçim</th><th>Kaynaklar</th><th>Fark</th></tr></thead>
-          <tbody id="recentMatches"><tr><td colspan="5">İlk gerçek tarama bekleniyor.</td></tr></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="lower">
-      <div class="section">
-        <div class="section-head"><h2>Son tarama</h2><span id="updated" class="updated">—</span></div>
-        <table>
-          <thead><tr><th>Kontrol</th><th>Sonuç</th></tr></thead>
-          <tbody>
-            <tr><td>Çekilen toplam oran</td><td id="fetched">—</td></tr>
-            <tr><td>Güncel kabul edilen oran</td><td id="fresh">—</td></tr>
-            <tr><td>Bulunan yakın eşleşme</td><td id="found">—</td></tr>
-            <tr><td>Gönderilen oran hareketi bildirimi</td><td id="movementAlerts">—</td></tr>
-            <tr><td>Tekrar olduğu için bastırılan</td><td id="suppressed">—</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="section">
-        <div class="section-head"><h2>Sistem durumu</h2></div>
-        <div class="state-list">
-          <div class="state-row"><span>Sağlık</span><span id="health">Kontrol ediliyor</span></div>
-          <div class="state-row"><span>Bildirim kanalı</span><span id="notifier">—</span></div>
-          <div class="state-row"><span>Google Sheets</span><span><a id="googleSheets" rel="noreferrer">—</a></span></div>
-          <div class="state-row"><span>Toplam tarama</span><span id="runs">—</span></div>
-          <div class="state-row"><span>Son başarı</span><span id="success">—</span></div>
-        </div>
-      </div>
-    </section>
-    <footer><span>Oranlar yalnızca aynı maç, pazar, seçim ve çizgide karşılaştırılır.</span><span>Otomatik yenileme: 15 saniye</span></footer>
+    <section id="maclar" class="section" style="margin-top:14px"><div class="section-head"><div><h2>Günün maç planı</h2><p class="section-kicker">Maç saatine yaklaştıkça kontrol sıklığı otomatik artar.</p></div><div class="section-actions"><span id="sheetDate" class="updated">—</span><a class="download" href="/daily-matches.csv">Maçları indir</a></div></div><div class="filter-row" role="group" aria-label="Maç türü filtresi"><button class="filter active" type="button" data-filter="all">Tümü <span id="allCount"></span></button><button class="filter" type="button" data-filter="live">Canlı <span id="liveCount"></span></button><button class="filter" type="button" data-filter="prematch">Maç önü <span id="prematchCount"></span></button></div><div class="table-wrap"><table><thead><tr><th>Karşılaşma</th><th>Lig</th><th>Başlangıç</th><th>Durum</th><th>Sonraki kontrol</th></tr></thead><tbody id="dailyFixtures"><tr><td colspan="5" class="empty">Günün maç listesi hazırlanıyor.</td></tr></tbody></table></div></section>
+    <section class="content-grid"><section id="eslesmeler" class="section"><div class="section-head"><div><h2>Son yakın oranlar</h2><p class="section-kicker">Aynı pazar ve seçimde karşılaştırılan en yakın oranlar.</p></div><span id="matchesUpdated" class="updated">—</span></div><div class="table-wrap"><table><thead><tr><th>Karşılaşma</th><th>Durum</th><th>Pazar / seçim</th><th>Kaynaklar</th><th>Fark</th></tr></thead><tbody id="recentMatches"><tr><td colspan="5" class="empty">İlk gerçek tarama bekleniyor.</td></tr></tbody></table></div></section><aside class="section"><div class="section-head"><div><h2>Son analiz sinyalleri</h2><p class="section-kicker">Yakın oran ve belirgin hareketler.</p></div></div><div id="recentSignals" class="signal-list"><div class="empty">Henüz analiz sinyali oluşmadı.</div></div></aside></section>
+    <section class="lower"><section class="section"><div class="section-head"><div><h2>Son okunan oranlar</h2><p class="section-kicker">Son taramadan en yeni 40 kayıt.</p></div><a class="download" href="/odds-history.csv">Oran geçmişini indir</a></div><div class="table-wrap"><table><thead><tr><th>Karşılaşma</th><th>Durum</th><th>Pazar / seçim</th><th>Bookmaker</th><th>Oran</th></tr></thead><tbody id="recentQuotes"><tr><td colspan="5" class="empty">İlk gerçek tarama bekleniyor.</td></tr></tbody></table></div></section><aside class="section"><div class="section-head"><div><h2>Sistem durumu</h2><p class="section-kicker">Servis ve kayıt bağlantıları.</p></div></div><div class="status-list"><div class="status-row"><span>Sağlık</span><span id="health">Kontrol ediliyor</span></div><div class="status-row"><span>Bildirim kanalı</span><span id="notifier">—</span></div><div class="status-row"><span>Google Sheets</span><span><a id="googleSheets" rel="noreferrer">—</a></span></div><div class="status-row"><span>Toplam tarama</span><span id="runs">—</span></div><div class="status-row"><span>Son başarı</span><span id="success">—</span></div><div class="status-row"><span>Oran hareket bildirimi</span><span id="movementAlerts">—</span></div><div class="status-row"><span>Tekrar olduğu için bastırılan</span><span id="suppressed">—</span></div></div></aside></section>
+    <footer><span>Oranlar yalnızca aynı maç, pazar, seçim ve çizgide karşılaştırılır.</span><span>Panel otomatik olarak 15 saniyede bir yenilenir.</span></footer>
   </main>
   <script>
     const el = (id) => document.getElementById(id);
+    let activeFilter = 'all'; let latestData = null;
     const number = (value) => Number(value || 0).toLocaleString('tr-TR');
-    const date = (value) => value ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'Europe/Istanbul' }).format(new Date(value)) : 'Henüz yok';
-    function render(data) {
-      const run = data.lastRun || {};
-      const mock = data.provider === 'mock';
-      const scraper = data.provider === 'betexplorer_scraper';
-      const telegram = data.notifier === 'telegram';
-      const sheet = data.dailySheet || { fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [], googleSheets: { enabled: false } };
-      const googleSheets = sheet.googleSheets || { enabled: false, url: null, lastSuccessAt: null, lastError: null };
-      el('live').className = 'live ' + (data.lastError ? 'bad' : 'ok');
-      el('liveText').textContent = data.lastError ? 'Hata var' : 'Sistem çalışıyor';
-      el('provider').textContent = mock ? 'Demo' : (scraper ? 'Web Tarama' : 'Gerçek API');
-      el('providerSub').textContent = mock ? 'Mock veriler kullanılıyor' : data.provider;
-      el('quotes').textContent = number(run.quotesFresh);
-      el('matches').textContent = number(run.matchesFound);
-      el('alertsSent').textContent = number(data.totals && data.totals.alertsSent);
-      el('fixtureCount').textContent = number(sheet.fixtures && sheet.fixtures.length);
-      el('signalCount').textContent = number(sheet.signalCount);
-      el('sheetDate').textContent = sheet.date ? 'Türkiye günü: ' + sheet.date : '—';
-      el('notifierSub').textContent = telegram ? 'Telegram aktif' : 'Telegram kapalı';
-      el('fetched').textContent = number(run.quotesFetched);
-      el('fresh').textContent = number(run.quotesFresh);
-      el('found').textContent = number(run.matchesFound);
-      el('movementAlerts').textContent = number(run.movementAlertsSent);
-      el('suppressed').textContent = number(run.alertsSuppressed);
-      el('updated').textContent = run.finishedAt ? date(run.finishedAt) : 'İlk tarama bekleniyor';
-      el('health').textContent = data.lastError ? 'Hata' : 'Sağlıklı';
-      el('notifier').textContent = telegram ? 'Telegram' : 'Terminal / Demo';
-      const googleLink = el('googleSheets');
-      googleLink.textContent = !googleSheets.enabled ? 'Kapalı' : (googleSheets.lastError ? 'Hata var' : (googleSheets.lastSuccessAt ? 'Senkronize' : 'Bağlantı bekleniyor'));
-      if (googleSheets.url) {
-        googleLink.href = googleSheets.url;
-        googleLink.target = '_blank';
-      } else {
-        googleLink.removeAttribute('href');
-        googleLink.removeAttribute('target');
-      }
-      googleLink.title = googleSheets.lastError || (googleSheets.lastSuccessAt ? 'Son başarı: ' + date(googleSheets.lastSuccessAt) : '');
-      el('runs').textContent = number(data.totals && data.totals.runs);
-      el('success').textContent = date(data.lastSuccessAt);
-      el('demoNotice').classList.toggle('show', mock);
-      el('telegramNotice').classList.toggle('show', !telegram);
-      el('errorNotice').classList.toggle('show', Boolean(data.lastError));
-      el('errorNotice').textContent = data.lastError ? 'Son hata: ' + data.lastError : '';
-      const fixturesBody = el('dailyFixtures');
-      fixturesBody.replaceChildren();
-      const fixtures = Array.isArray(sheet.fixtures) ? sheet.fixtures : [];
-      if (fixtures.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 6;
-        cell.textContent = 'Bugün için listelenmiş maç bulunmadı veya liste taraması sürüyor.';
-        row.appendChild(cell);
-        fixturesBody.appendChild(row);
-      } else {
-        for (const fixture of fixtures.slice(0, 100)) {
-          const row = document.createElement('tr');
-          const values = [
-            fixture.homeTeam + ' - ' + fixture.awayTeam,
-            fixture.leagueName,
-            date(fixture.commenceTime),
-            fixture.phase === 'live' ? 'CANLI / BAŞLADI' : 'MAÇ ÖNÜ',
-            date(fixture.lastOddsCheckAt),
-            date(fixture.nextOddsCheckAt),
-          ];
-          for (const value of values) {
-            const cell = document.createElement('td');
-            cell.textContent = value;
-            row.appendChild(cell);
-          }
-          fixturesBody.appendChild(row);
-        }
-      }
-      const signalsBody = el('recentSignals');
-      signalsBody.replaceChildren();
-      const signals = Array.isArray(sheet.recentSignals) ? sheet.recentSignals : [];
-      if (signals.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 5;
-        cell.textContent = 'Henüz yakın oran veya belirgin oran hareketi bulunmadı.';
-        row.appendChild(cell);
-        signalsBody.appendChild(row);
-      } else {
-        for (const signal of signals) {
-          const row = document.createElement('tr');
-          const signalName = signal.type === 'close_odds' ? 'YAKIN ORAN' : (signal.type === 'odds_drop' ? 'ORAN DÜŞTÜ' : 'ORAN YÜKSELDİ');
-          const values = [
-            signal.event,
-            signal.market + ' / ' + signal.selection + (signal.line === null ? '' : ' (' + signal.line + ')'),
-            signalName,
-            signal.detail,
-            date(signal.detectedAt),
-          ];
-          for (const value of values) {
-            const cell = document.createElement('td');
-            cell.textContent = value;
-            row.appendChild(cell);
-          }
-          signalsBody.appendChild(row);
-        }
-      }
-      const quotesBody = el('recentQuotes');
-      quotesBody.replaceChildren();
-      const recentQuotes = Array.isArray(data.recentQuotes) ? data.recentQuotes : [];
-      if (recentQuotes.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 5;
-        cell.textContent = 'Bu taramada gösterilecek güncel oran bulunmadı.';
-        row.appendChild(cell);
-        quotesBody.appendChild(row);
-      } else {
-        for (const quote of recentQuotes) {
-          const row = document.createElement('tr');
-          const values = [
-            quote.event,
-            quote.phase === 'live' ? 'CANLI' : 'MAÇ ÖNÜ',
-            quote.market + ' / ' + quote.selection + (quote.line === null ? '' : ' (' + quote.line + ')'),
-            quote.bookmaker,
-            Number(quote.price).toFixed(2),
-          ];
-          for (const value of values) {
-            const cell = document.createElement('td');
-            cell.textContent = value;
-            row.appendChild(cell);
-          }
-          quotesBody.appendChild(row);
-        }
-      }
-      const recentBody = el('recentMatches');
-      recentBody.replaceChildren();
-      const matches = Array.isArray(data.recentMatches) ? data.recentMatches : [];
-      if (matches.length === 0) {
-        const row = document.createElement('tr');
-        const cell = document.createElement('td');
-        cell.colSpan = 5;
-        cell.textContent = 'Bu taramada %2 içinde eşleşme bulunmadı.';
-        row.appendChild(cell);
-        recentBody.appendChild(row);
-      } else {
-        for (const match of matches) {
-          const row = document.createElement('tr');
-          const values = [
-            match.event,
-            match.phase === 'live' ? 'CANLI' : 'MAÇ ÖNÜ',
-            match.market + ' / ' + match.selection + (match.line === null ? '' : ' (' + match.line + ')'),
-            match.bookmakerA + ' ' + Number(match.priceA).toFixed(2) + ' ↔ ' + match.bookmakerB + ' ' + Number(match.priceB).toFixed(2),
-            '%' + Number(match.differencePercent).toFixed(2),
-          ];
-          for (const value of values) {
-            const cell = document.createElement('td');
-            cell.textContent = value;
-            row.appendChild(cell);
-          }
-          recentBody.appendChild(row);
-        }
-      }
-    }
-    async function refresh() {
-      try {
-        const response = await fetch('/status', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Durum bilgisi alınamadı');
-        render(await response.json());
-      } catch (error) {
-        el('live').className = 'live bad';
-        el('liveText').textContent = 'Bağlantı hatası';
-        el('errorNotice').classList.add('show');
-        el('errorNotice').textContent = error instanceof Error ? error.message : String(error);
-      }
-    }
-    refresh();
-    setInterval(refresh, 15000);
+    const date = (value) => value ? new Intl.DateTimeFormat('tr-TR', { dateStyle:'short', timeStyle:'short', timeZone:'Europe/Istanbul' }).format(new Date(value)) : 'Henüz yok';
+    const phaseLabel = (phase) => phase === 'live' ? 'CANLI' : 'MAÇ ÖNÜ';
+    function phaseBadge(phase) { const badge = document.createElement('span'); badge.className = 'phase ' + (phase === 'live' ? 'live' : ''); badge.textContent = phaseLabel(phase); return badge; }
+    function providerLabel(provider) { if (provider === 'mock') return 'Demo'; if (provider && provider.includes('betexplorer_scraper') && provider.includes('the_odds_api')) return 'Web + API'; if (provider === 'betexplorer_scraper') return 'Web tarama'; if (provider === 'the_odds_api') return 'Gerçek API'; return provider || '—'; }
+    function addCell(row, value, className) { const cell = document.createElement('td'); if (className) cell.className = className; cell.textContent = value; row.appendChild(cell); return cell; }
+    function addPhaseCell(row, phase) { const cell = document.createElement('td'); cell.appendChild(phaseBadge(phase)); row.appendChild(cell); }
+    function addEventCell(row, event, detail) { const cell = document.createElement('td'); const title = document.createElement('span'); title.className = 'event'; title.textContent = event; cell.appendChild(title); if (detail) { const sub = document.createElement('span'); sub.className = 'secondary'; sub.textContent = detail; cell.appendChild(sub); } row.appendChild(cell); }
+    function emptyRow(body, columns, message) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = columns; cell.className = 'empty'; cell.textContent = message; row.appendChild(cell); body.appendChild(row); }
+    function renderFixtures(sheet) { const body = el('dailyFixtures'); body.replaceChildren(); const fixtures = Array.isArray(sheet.fixtures) ? sheet.fixtures : []; const visible = activeFilter === 'all' ? fixtures : fixtures.filter((fixture) => fixture.phase === activeFilter); el('allCount').textContent = '(' + number(fixtures.length) + ')'; el('liveCount').textContent = '(' + number(fixtures.filter((fixture) => fixture.phase === 'live').length) + ')'; el('prematchCount').textContent = '(' + number(fixtures.filter((fixture) => fixture.phase === 'prematch').length) + ')'; if (visible.length === 0) { emptyRow(body, 5, activeFilter === 'live' ? 'Şu anda canlı karşılaşma görünmüyor.' : 'Bu filtrede listelenmiş maç bulunmuyor veya liste taraması sürüyor.'); return; } for (const fixture of visible.slice(0,100)) { const row = document.createElement('tr'); addEventCell(row, fixture.homeTeam + ' - ' + fixture.awayTeam, fixture.lastOddsCheckAt ? 'Son kontrol: ' + date(fixture.lastOddsCheckAt) : 'Henüz oran kontrolü yok'); addCell(row, fixture.leagueName || '—'); addCell(row, date(fixture.commenceTime)); addPhaseCell(row, fixture.phase); addCell(row, date(fixture.nextOddsCheckAt)); body.appendChild(row); } }
+    function renderSignals(sheet) { const body = el('recentSignals'); body.replaceChildren(); const signals = Array.isArray(sheet.recentSignals) ? sheet.recentSignals : []; if (signals.length === 0) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'Henüz yakın oran veya belirgin oran hareketi bulunmadı.'; body.appendChild(empty); return; } for (const signal of signals.slice(0,8)) { const card = document.createElement('article'); card.className = 'signal'; const badge = document.createElement('div'); badge.className = 'signal-badge ' + (signal.type === 'odds_drop' ? 'drop' : (signal.type === 'odds_rise' ? 'rise' : '')); badge.textContent = signal.type === 'close_odds' ? '≈' : (signal.type === 'odds_drop' ? '↓' : '↑'); const copy = document.createElement('div'); const title = document.createElement('div'); title.className = 'signal-title'; title.textContent = signal.event; const detail = document.createElement('div'); detail.className = 'signal-detail'; detail.textContent = signal.market + ' · ' + signal.selection + (signal.line === null ? '' : ' ' + signal.line) + ' — ' + signal.detail; const time = document.createElement('div'); time.className = 'signal-time'; time.textContent = date(signal.detectedAt); copy.append(title,detail,time); card.append(badge,copy); body.appendChild(card); } }
+    function renderQuotes(data) { const body = el('recentQuotes'); body.replaceChildren(); const quotes = Array.isArray(data.recentQuotes) ? data.recentQuotes : []; if (quotes.length === 0) { emptyRow(body,5,'Bu taramada gösterilecek güncel oran bulunmadı.'); return; } for (const quote of quotes) { const row = document.createElement('tr'); addEventCell(row,quote.event,quote.updatedAt ? 'Güncelleme: ' + date(quote.updatedAt) : ''); addPhaseCell(row,quote.phase); addCell(row,quote.market + ' / ' + quote.selection + (quote.line === null ? '' : ' (' + quote.line + ')')); addCell(row,quote.bookmaker); addCell(row,Number(quote.price).toFixed(2),'price'); body.appendChild(row); } }
+    function renderMatches(data) { const body = el('recentMatches'); body.replaceChildren(); const matches = Array.isArray(data.recentMatches) ? data.recentMatches : []; if (matches.length === 0) { emptyRow(body,5,'Bu taramada %2 içinde eşleşme bulunmadı.'); return; } for (const match of matches) { const row = document.createElement('tr'); addEventCell(row,match.event,match.detectedAt ? 'Sinyal: ' + date(match.detectedAt) : ''); addPhaseCell(row,match.phase); addCell(row,match.market + ' / ' + match.selection + (match.line === null ? '' : ' (' + match.line + ')')); addCell(row,match.bookmakerA + ' ' + Number(match.priceA).toFixed(2) + ' ↔ ' + match.bookmakerB + ' ' + Number(match.priceB).toFixed(2)); const diff = document.createElement('td'); const pill = document.createElement('span'); pill.className = 'diff'; pill.textContent = '%' + Number(match.differencePercent).toFixed(2); diff.appendChild(pill); row.appendChild(diff); body.appendChild(row); } }
+    function render(data) { latestData = data; const run = data.lastRun || {}; const mock = data.provider === 'mock'; const telegram = data.notifier === 'telegram'; const sheet = data.dailySheet || { fixtures:[], oddsSnapshotCount:0, signalCount:0, recentSignals:[], googleSheets:{ enabled:false } }; const googleSheets = sheet.googleSheets || { enabled:false, url:null, lastSuccessAt:null, lastError:null }; const fixtures = Array.isArray(sheet.fixtures) ? sheet.fixtures : []; const liveFixtures = fixtures.filter((fixture) => fixture.phase === 'live').length; el('live').className = 'connection ' + (data.lastError ? 'bad' : 'ok'); el('liveText').textContent = data.lastError ? 'Hata var' : (data.running ? 'Tarama sürüyor' : 'Sistem çalışıyor'); el('heroUpdated').textContent = run.finishedAt ? date(run.finishedAt) : 'İlk tarama bekleniyor'; el('heroSub').textContent = data.lastError ? 'Son taramada hata oluştu; ayrıntı aşağıda.' : (data.running ? 'Oranlar şu an kontrol ediliyor.' : number(run.quotesFresh) + ' güncel oran son taramada işlendi.'); el('provider').textContent = providerLabel(data.provider); el('providerSub').textContent = mock ? 'Örnek veriler kullanılıyor' : (data.provider || 'Bağlanıyor'); el('quotes').textContent = number(run.quotesFresh); el('matches').textContent = number(run.matchesFound); el('alertsSent').textContent = number(data.totals && data.totals.alertsSent); el('signalCount').textContent = number(sheet.signalCount); el('fixtureCount').textContent = number(fixtures.length); el('fixtureSub').textContent = liveFixtures > 0 ? number(liveFixtures) + ' canlı karşılaşma' : 'Bugün planlanan karşılaşmalar'; el('sheetDate').textContent = sheet.date ? 'Türkiye günü: ' + sheet.date : '—'; el('matchesUpdated').textContent = run.finishedAt ? 'Son tarama: ' + date(run.finishedAt) : '—'; el('notifierSub').textContent = telegram ? 'Telegram aktif' : 'Telegram kapalı'; el('health').textContent = data.lastError ? 'Hata var' : (data.running ? 'Tarama sürüyor' : 'Sağlıklı'); el('notifier').textContent = telegram ? 'Telegram' : 'Terminal / Demo'; el('movementAlerts').textContent = number(run.movementAlertsSent); el('suppressed').textContent = number(run.alertsSuppressed); const googleLink = el('googleSheets'); googleLink.textContent = !googleSheets.enabled ? 'Kapalı' : (googleSheets.lastError ? 'Hata var' : (googleSheets.lastSuccessAt ? 'Senkronize' : 'Bağlantı bekleniyor')); if (googleSheets.url) { googleLink.href = googleSheets.url; googleLink.target = '_blank'; } else { googleLink.removeAttribute('href'); googleLink.removeAttribute('target'); } googleLink.title = googleSheets.lastError || (googleSheets.lastSuccessAt ? 'Son başarı: ' + date(googleSheets.lastSuccessAt) : ''); el('runs').textContent = number(data.totals && data.totals.runs); el('success').textContent = date(data.lastSuccessAt); el('demoNotice').classList.toggle('show',mock); el('telegramNotice').classList.toggle('show',!telegram); el('errorNotice').classList.toggle('show',Boolean(data.lastError)); el('errorNotice').textContent = data.lastError ? 'Son hata: ' + data.lastError : ''; renderFixtures(sheet); renderSignals(sheet); renderQuotes(data); renderMatches(data); }
+    function setFilter(filter) { activeFilter = filter; document.querySelectorAll('.filter').forEach((button) => button.classList.toggle('active',button.dataset.filter === filter)); if (latestData) renderFixtures(latestData.dailySheet || {}); }
+    document.querySelectorAll('.filter').forEach((button) => button.addEventListener('click',() => setFilter(button.dataset.filter || 'all')));
+    async function refresh(manual) { const button = el('refreshButton'); if (manual) { button.disabled = true; button.classList.add('loading'); el('refreshText').textContent = 'Yenileniyor'; } try { const response = await fetch('/status',{ cache:'no-store' }); if (!response.ok) throw new Error('Durum bilgisi alınamadı'); render(await response.json()); } catch (error) { el('live').className = 'connection bad'; el('liveText').textContent = 'Bağlantı hatası'; el('errorNotice').classList.add('show'); el('errorNotice').textContent = error instanceof Error ? error.message : String(error); } finally { if (manual) { button.disabled = false; button.classList.remove('loading'); el('refreshText').textContent = 'Durumu yenile'; } } }
+    el('refreshButton').addEventListener('click',() => refresh(true)); refresh(false); setInterval(() => refresh(false),15000);
   </script>
 </body>
 </html>`;
