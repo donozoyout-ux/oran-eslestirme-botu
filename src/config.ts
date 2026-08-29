@@ -7,9 +7,19 @@ export type ProviderName = "mock" | "the_odds_api" | "betexplorer_scraper";
 export interface AppConfig {
   provider: ProviderName;
   oddsApiKey?: string;
+  apiFootballKey?: string;
+  footballDataToken?: string;
   sportKeys: string[];
   bookmakerKeys: string[];
   regions: string[];
+  apiFootballMaxFixtures: number;
+  apiFootballFixtureCacheMinutes: number;
+  apiFootballPrematchCacheMinutes: number;
+  apiFootballLiveCacheMinutes: number;
+  apiFootballDailyRequestBudget: number;
+  footballDataCompetitionCodes: string[];
+  footballDataCacheMinutes: number;
+  footballDataDailyRequestBudget: number;
   scraperMaxMatches: number;
   scraperPageTimeoutMs: number;
   scraperWaitMs: number;
@@ -47,10 +57,7 @@ function optional(name: string): string | undefined {
 }
 
 function csv(name: string, fallback: string): string[] {
-  return (optional(name) ?? fallback)
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  return (optional(name) ?? fallback).split(",").map((value) => value.trim()).filter(Boolean);
 }
 
 function numberValue(name: string, fallback: number, constraints: { min: number; max: number }): number {
@@ -78,10 +85,7 @@ function leagueScopeValue(): LeagueScope {
 
 export function loadConfig(): AppConfig {
   const configuredProvider = optional("ODDS_PROVIDER") ?? "mock";
-  const upgradeLegacyProductionMock =
-    configuredProvider === "mock" &&
-    process.env.NODE_ENV === "production" &&
-    !booleanValue("ALLOW_MOCK_IN_PRODUCTION", false);
+  const upgradeLegacyProductionMock = configuredProvider === "mock" && process.env.NODE_ENV === "production" && !booleanValue("ALLOW_MOCK_IN_PRODUCTION", false);
   const providerRaw = upgradeLegacyProductionMock ? "betexplorer_scraper" : configuredProvider;
   if (providerRaw !== "mock" && providerRaw !== "the_odds_api" && providerRaw !== "betexplorer_scraper") {
     throw new Error("ODDS_PROVIDER mock, the_odds_api veya betexplorer_scraper olmali.");
@@ -90,9 +94,19 @@ export function loadConfig(): AppConfig {
   const config: AppConfig = {
     provider: providerRaw,
     oddsApiKey: optional("ODDS_API_KEY"),
+    apiFootballKey: optional("API_FOOTBALL_KEY"),
+    footballDataToken: optional("FOOTBALL_DATA_TOKEN"),
     sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league"),
     bookmakerKeys: csv("BOOKMAKER_KEYS", "pinnacle,betfair_ex_eu,betfair,bet365"),
     regions: csv("REGIONS", "eu,uk"),
+    apiFootballMaxFixtures: numberValue("API_FOOTBALL_MAX_FIXTURES", 2, { min: 1, max: 10 }),
+    apiFootballFixtureCacheMinutes: numberValue("API_FOOTBALL_FIXTURE_CACHE_MINUTES", 30, { min: 5, max: 360 }),
+    apiFootballPrematchCacheMinutes: numberValue("API_FOOTBALL_PREMATCH_CACHE_MINUTES", 120, { min: 15, max: 1_440 }),
+    apiFootballLiveCacheMinutes: numberValue("API_FOOTBALL_LIVE_CACHE_MINUTES", 10, { min: 2, max: 120 }),
+    apiFootballDailyRequestBudget: numberValue("API_FOOTBALL_DAILY_REQUEST_BUDGET", 80, { min: 1, max: 100 }),
+    footballDataCompetitionCodes: csv("FOOTBALL_DATA_COMPETITIONS", "PL,PD,BL1,SA,FL1,CL"),
+    footballDataCacheMinutes: numberValue("FOOTBALL_DATA_CACHE_MINUTES", 30, { min: 5, max: 1_440 }),
+    footballDataDailyRequestBudget: numberValue("FOOTBALL_DATA_DAILY_REQUEST_BUDGET", 30, { min: 1, max: 100 }),
     scraperMaxMatches: numberValue("SCRAPER_MAX_MATCHES", 2, { min: 1, max: 10 }),
     scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 60_000, { min: 5_000, max: 60_000 }),
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
@@ -124,17 +138,13 @@ export function loadConfig(): AppConfig {
     googleSheetsSyncMinutes: numberValue("GOOGLE_SHEETS_SYNC_MINUTES", 15, { min: 5, max: 1_440 }),
   };
 
-  if (config.provider === "the_odds_api" && !config.oddsApiKey) {
-    throw new Error("ODDS_PROVIDER=the_odds_api icin ODDS_API_KEY gerekli.");
-  }
+  if (config.provider === "the_odds_api" && !config.oddsApiKey) throw new Error("ODDS_PROVIDER=the_odds_api icin ODDS_API_KEY gerekli.");
   if (!config.dryRun && (!config.telegramBotToken || !config.telegramChatId)) {
     throw new Error("DRY_RUN=false iken TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID gerekli.");
   }
   const googleValues = [config.googleSheetsSpreadsheetId, config.googleServiceAccountEmail, config.googlePrivateKey];
   if (googleValues.some(Boolean) && !googleValues.every(Boolean)) {
-    throw new Error(
-      "Google Sheets icin GOOGLE_SHEETS_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL ve GOOGLE_PRIVATE_KEY birlikte gerekli.",
-    );
+    throw new Error("Google Sheets icin GOOGLE_SHEETS_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL ve GOOGLE_PRIVATE_KEY birlikte gerekli.");
   }
   return config;
 }
