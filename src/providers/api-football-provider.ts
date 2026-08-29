@@ -313,8 +313,11 @@ export class ApiFootballProvider implements OddsProvider {
       headers: { "x-apisports-key": this.options.apiKey, accept: "application/json" },
       signal: requestSignal,
     });
-    const remaining = Number(response.headers.get("x-ratelimit-requests-remaining"));
-    if (Number.isFinite(remaining)) this.reportedRemaining = remaining;
+    const remainingHeader = response.headers.get("x-ratelimit-requests-remaining");
+    if (remainingHeader !== null) {
+      const remaining = Number(remainingHeader);
+      if (Number.isFinite(remaining)) this.reportedRemaining = remaining;
+    }
     const text = await response.text();
     if (!response.ok) throw new Error(`API-Football ${response.status}: ${text.slice(0, 400)}`);
     const parsed = JSON.parse(text) as ApiEnvelope<T>;
