@@ -97,6 +97,8 @@ DRY_RUN=true
 
 Her taramada canli maclara oncelik verilir ve en fazla `SCRAPER_MAX_MATCHES` sayfa okunur. Dusuk frekans varsayilani hedef siteyi gereksiz yukten korur. Canli sayfada standart pazarlar, mac onunde ilk surumde `1X2` taranir. BetExplorer bookmaker listesini sunucu bolgesine gore degistirebilir. Secilen kaynaklar gorunmezse `SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK=true` ile sayfada adi acikca gorunen bookmaker'lar kullanilir; panel gercek kaynak adlarini gosterir.
 
+`ODDS_PROVIDER=betexplorer_scraper` iken `ODDS_API_KEY` de eklenirse servis iki kaynagi birlikte kullanir: BetExplorer taramasi devam eder, The Odds API ise ikinci kaynak olur. Kaynaklardan biri gecici hata verirse digeri taramayi surdurur. API anahtarini yalnizca Render'in gizli ortam degiskenine koyun; GitHub'a veya mesajlasma ekranina koymayin.
+
 Liste sayfasi her dongude hafif olarak okunur ve o gunun maclari saklanir. Oran detay sayfalari ise yalnizca zamanlama kurali geldiginde acilir: varsayilan olarak maca 6 saatten fazla varsa beklenir, 6-1 saat arasi saatte bir, 60-15 dakika arasi 15 dakikada bir, son 15 dakikada 5 dakikada bir ve canlida 3 dakikada bir kontrol edilir. Bir turdaki sayfa siniri dolarsa zamani gelen diger maclar sonraki dongulerde sirayla taranir.
 
 Paneldeki `Maclari indir` ve `Oran gecmisini indir` baglantilari CSV uretir. Bu dosyalar dogrudan Google Sheets veya Excel'e aktarilabilir. Google Sheets'e API ile otomatik yazma icin ayrica bir Google servis hesabi ve hedef Sheet kimligi gerekir; ana tarama bu baglanti olmadan da calisir.
