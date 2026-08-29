@@ -5,6 +5,8 @@ import type { DailySheetDataset, DailySheetMirror, OddsHistoryEntry } from "./da
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+const LIVE_STALE_MINUTES = 45;
+const MAX_LIVE_DURATION_MINUTES = 240;
 
 type SheetValue = string | number | boolean;
 
@@ -12,6 +14,7 @@ interface SheetTable {
   title: string;
   rows: SheetValue[][];
   columnWidths: number[];
+  hidden?: boolean;
 }
 
 interface GoogleSheetsMirrorOptions {
@@ -30,7 +33,16 @@ interface SpreadsheetMetadata {
   sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
 }
 
+interface ActiveFixtureContext {
+  all: MatchFixture[];
+  display: MatchFixture[];
+  activeIds: Set<string>;
+  matchKeyById: Map<string, string>;
+  fixtureByMatchKey: Map<string, MatchFixture>;
+}
+
 interface RankedSelection {
+  matchKey: string;
   sourceEventId: string;
   event: string;
   phase: string;
@@ -102,27 +114,70 @@ function safeValue(value: unknown): SheetValue {
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
 }
 
-function isActiveFixture(fixture: MatchFixture, now = new Date()): boolean {
-  if (fixture.phase === "live") return true;
-  const commence = Date.parse(fixture.commenceTime);
-  return Number.isFinite(commence) && commence > now.getTime();
+function normalizeName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/\b(fc|cf|afc|sc|club)\b/g, "")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
 }
 
-function activeFixtures(fixtures: MatchFixture[], now = new Date()): MatchFixture[] {
-  const unique = new Map<string, MatchFixture>();
-  for (const fixture of fixtures) {
-    if (!isActiveFixture(fixture, now)) continue;
-    const existing = unique.get(fixture.sourceEventId);
-    if (!existing || fixture.phase === "live") unique.set(fixture.sourceEventId, fixture);
+function fixtureMatchKey(fixture: Pick<MatchFixture, "homeTeam" | "awayTeam">): string {
+  return `${normalizeName(fixture.homeTeam)}|${normalizeName(fixture.awayTeam)}`;
+}
+
+function isActiveFixture(fixture: MatchFixture, now = new Date()): boolean {
+  const commence = Date.parse(fixture.commenceTime);
+  if (!Number.isFinite(commence)) return false;
+  if (fixture.phase === "prematch") return commence > now.getTime();
+
+  const elapsedMinutes = (now.getTime() - commence) / 60_000;
+  if (elapsedMinutes > MAX_LIVE_DURATION_MINUTES) return false;
+
+  const lastCheck = fixture.lastOddsCheckAt ? Date.parse(fixture.lastOddsCheckAt) : Number.NaN;
+  if (Number.isFinite(lastCheck) && (now.getTime() - lastCheck) / 60_000 > LIVE_STALE_MINUTES) return false;
+  return true;
+}
+
+function fixturePriority(fixture: MatchFixture): number {
+  if (fixture.phase === "live") return 2;
+  return 1;
+}
+
+function activeFixtureContext(fixtures: MatchFixture[], now = new Date()): ActiveFixtureContext {
+  const all = fixtures.filter((fixture) => isActiveFixture(fixture, now));
+  const activeIds = new Set<string>();
+  const matchKeyById = new Map<string, string>();
+  const fixtureByMatchKey = new Map<string, MatchFixture>();
+
+  for (const fixture of all) {
+    const key = fixtureMatchKey(fixture);
+    activeIds.add(fixture.sourceEventId);
+    matchKeyById.set(fixture.sourceEventId, key);
+    const existing = fixtureByMatchKey.get(key);
+    if (!existing) {
+      fixtureByMatchKey.set(key, fixture);
+      continue;
+    }
+    const priorityDifference = fixturePriority(fixture) - fixturePriority(existing);
+    const fixtureCheck = Date.parse(fixture.lastOddsCheckAt ?? "");
+    const existingCheck = Date.parse(existing.lastOddsCheckAt ?? "");
+    if (priorityDifference > 0 || (priorityDifference === 0 && fixtureCheck > existingCheck)) {
+      fixtureByMatchKey.set(key, fixture);
+    }
   }
-  return [...unique.values()].sort((a, b) => {
+
+  const display = [...fixtureByMatchKey.values()].sort((a, b) => {
     if (a.phase !== b.phase) return a.phase === "live" ? -1 : 1;
     return Date.parse(a.commenceTime) - Date.parse(b.commenceTime);
   });
+
+  return { all, display, activeIds, matchKeyById, fixtureByMatchKey };
 }
 
-function activeHistory(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): OddsHistoryEntry[] {
-  const activeIds = new Set(fixtures.map((fixture) => fixture.sourceEventId));
+function activeHistory(entries: OddsHistoryEntry[], activeIds: Set<string>): OddsHistoryEntry[] {
   return entries.filter((entry) => activeIds.has(entry.sourceEventId));
 }
 
@@ -140,13 +195,14 @@ function latestHistory(entries: OddsHistoryEntry[]): OddsHistoryEntry[] {
     const existing = latest.get(key);
     if (!existing || Date.parse(entry.capturedAt) >= Date.parse(existing.capturedAt)) latest.set(key, entry);
   }
-  return [...latest.values()].sort((a, b) => a.event.localeCompare(b.event) || a.market.localeCompare(b.market));
+  return [...latest.values()];
 }
 
-function groupedSelections(entries: OddsHistoryEntry[]): OddsHistoryEntry[][] {
+function groupedSelections(entries: OddsHistoryEntry[], matchKeyById: Map<string, string>): OddsHistoryEntry[][] {
   const groups = new Map<string, OddsHistoryEntry[]>();
   for (const entry of latestHistory(entries)) {
-    const key = [entry.sourceEventId, entry.marketKey, entry.period, entry.selectionKey, entry.line ?? ""].join("|");
+    const matchKey = matchKeyById.get(entry.sourceEventId) ?? entry.sourceEventId;
+    const key = [matchKey, entry.marketKey, entry.period, entry.selectionKey, entry.line ?? ""].join("|");
     const list = groups.get(key) ?? [];
     list.push(entry);
     groups.set(key, list);
@@ -160,8 +216,8 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
 }
 
-function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
-  return groupedSelections(entries)
+function rankedSelections(entries: OddsHistoryEntry[], matchKeyById: Map<string, string>): RankedSelection[] {
+  return groupedSelections(entries, matchKeyById)
     .map((list): RankedSelection | null => {
       const first = list[0]!;
       const prices = list.map((item) => item.price).filter((price) => Number.isFinite(price) && price > 1);
@@ -170,24 +226,26 @@ function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
       const fairOdds = median(prices);
       const valuePercent = ((best.price / fairOdds) - 1) * 100;
       const dispersionPercent = fairOdds > 0 ? ((Math.max(...prices) - Math.min(...prices)) / fairOdds) * 100 : 100;
-      const coverageScore = Math.min(list.length / 5, 1) * 35;
+      const sourceCount = new Set(list.map((item) => `${item.provider}:${item.bookmakerKey}`)).size;
+      const coverageScore = Math.min(sourceCount / 5, 1) * 35;
       const agreementScore = Math.max(0, 1 - dispersionPercent / 12) * 35;
       const valueScore = Math.min(Math.max(valuePercent, 0) / 8, 1) * 30;
       const score = Math.round(coverageScore + agreementScore + valueScore);
-      const verdict: RankedSelection["verdict"] = score >= 75 && valuePercent >= 2 && list.length >= 3
+      const verdict: RankedSelection["verdict"] = score >= 75 && valuePercent >= 2 && sourceCount >= 3
         ? "GÜÇLÜ ADAY"
         : score >= 58 && valuePercent > 0
           ? "İZLE"
           : "UZAK DUR";
-      const reason = list.length < 3
-        ? `Sadece ${list.length} kaynak var; karar için veri zayıf.`
+      const reason = sourceCount < 3
+        ? `Sadece ${sourceCount} kaynak var; karar için veri zayıf.`
         : valuePercent >= 2
-          ? `${list.length} kaynakta en iyi oran piyasa ortasına göre %${valuePercent.toFixed(1)} avantajlı.`
+          ? `${sourceCount} kaynakta en iyi oran piyasa ortasına göre %${valuePercent.toFixed(1)} avantajlı.`
           : "Kaynaklar karşılaştırıldı; belirgin fiyat avantajı oluşmadı.";
       return {
-        sourceEventId: first.sourceEventId,
+        matchKey: matchKeyById.get(first.sourceEventId) ?? first.sourceEventId,
+        sourceEventId: best.sourceEventId,
         event: first.event,
-        phase: first.phase,
+        phase: list.some((item) => item.phase === "live") ? "live" : first.phase,
         market: first.market,
         period: first.period,
         selection: first.selection,
@@ -197,7 +255,7 @@ function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
         fairOdds,
         fairProbability: 100 / fairOdds,
         valuePercent,
-        sourceCount: list.length,
+        sourceCount,
         dispersionPercent,
         score,
         verdict,
@@ -209,20 +267,18 @@ function rankedSelections(entries: OddsHistoryEntry[]): RankedSelection[] {
     .sort((a, b) => b.score - a.score || b.valuePercent - a.valuePercent);
 }
 
-function oneBestSelectionPerMatch(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): RankedSelection[] {
-  const fixtureById = new Map(fixtures.map((fixture) => [fixture.sourceEventId, fixture]));
+function oneBestSelectionPerMatch(entries: OddsHistoryEntry[], context: ActiveFixtureContext): RankedSelection[] {
   const bestByMatch = new Map<string, RankedSelection>();
-  for (const item of rankedSelections(entries)) {
+  for (const item of rankedSelections(entries, context.matchKeyById)) {
     if (item.verdict === "UZAK DUR") continue;
-    if (!fixtureById.has(item.sourceEventId)) continue;
-    const existing = bestByMatch.get(item.sourceEventId);
+    const existing = bestByMatch.get(item.matchKey);
     if (!existing || item.score > existing.score || (item.score === existing.score && item.valuePercent > existing.valuePercent)) {
-      bestByMatch.set(item.sourceEventId, item);
+      bestByMatch.set(item.matchKey, item);
     }
   }
   return [...bestByMatch.values()].sort((a, b) => {
-    const fixtureA = fixtureById.get(a.sourceEventId)!;
-    const fixtureB = fixtureById.get(b.sourceEventId)!;
+    const fixtureA = context.fixtureByMatchKey.get(a.matchKey)!;
+    const fixtureB = context.fixtureByMatchKey.get(b.matchKey)!;
     if (fixtureA.phase !== fixtureB.phase) return fixtureA.phase === "live" ? -1 : 1;
     const timeDifference = Date.parse(fixtureA.commenceTime) - Date.parse(fixtureB.commenceTime);
     if (timeDifference !== 0) return timeDifference;
@@ -230,22 +286,14 @@ function oneBestSelectionPerMatch(entries: OddsHistoryEntry[], fixtures: MatchFi
   });
 }
 
-function simpleDecisionRows(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): SheetValue[][] {
-  const useful = oneBestSelectionPerMatch(entries, fixtures).slice(0, 20);
+function simpleDecisionRows(entries: OddsHistoryEntry[], context: ActiveFixtureContext): SheetValue[][] {
+  const useful = oneBestSelectionPerMatch(entries, context).slice(0, 20);
   const rows: SheetValue[][] = [[
-    "SIRA",
-    "DURUM",
-    "KARAR",
-    "MAÇ",
-    "NE OYNANIR?",
-    "ORAN",
-    "BOOKMAKER",
-    "GÜVEN",
-    "KISA NEDEN",
+    "SIRA", "DURUM", "KARAR", "MAÇ", "NE OYNANIR?", "ORAN", "BOOKMAKER", "GÜVEN", "KISA NEDEN",
   ]];
 
   useful.forEach((item, index) => {
-    const fixture = fixtures.find((candidate) => candidate.sourceEventId === item.sourceEventId);
+    const fixture = context.fixtureByMatchKey.get(item.matchKey);
     const choice = item.line === null
       ? `${item.market} → ${item.selection}`
       : `${item.market} ${item.line} → ${item.selection}`;
@@ -253,7 +301,7 @@ function simpleDecisionRows(entries: OddsHistoryEntry[], fixtures: MatchFixture[
       index + 1,
       fixture?.phase === "live" ? "CANLI" : "YAKLAŞAN",
       item.verdict,
-      item.event,
+      `${fixture?.homeTeam ?? item.event.split(" - ")[0]} - ${fixture?.awayTeam ?? item.event.split(" - ")[1] ?? ""}`,
       choice,
       Number(item.bestPrice.toFixed(2)),
       item.bookmaker,
@@ -264,65 +312,78 @@ function simpleDecisionRows(entries: OddsHistoryEntry[], fixtures: MatchFixture[
 
   if (useful.length === 0) {
     rows.push([
-      "",
-      "",
-      "BEKLE",
-      "Şu anda aktif ve yeterince güçlü aday yok",
-      "Yeni maç/veri geldikçe burada tek satır halinde görünecek",
-      "",
-      "",
-      "",
-      "Biten maçlar otomatik olarak bu görünümden kaldırılır.",
+      "", "", "BEKLE", "Şu anda aktif ve yeterince güçlü aday yok",
+      "Yeni maç/veri geldikçe burada tek satır halinde görünecek", "", "", "",
+      "Biten veya güncellenmeyen maçlar otomatik olarak kaldırılır.",
     ].map(safeValue));
   }
   return rows;
 }
 
-function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetValue[][] {
+function marketRows(entries: OddsHistoryEntry[], marketKeys: string[], context: ActiveFixtureContext): SheetValue[][] {
   const rows: SheetValue[][] = [[
-    "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi", "Bookmaker", "Oran", "Kayıt Saati",
+    "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi", "En İyi Oran", "En İyi Bookmaker", "Kaynak Sayısı",
   ]];
-  for (const entry of latestHistory(entries).filter((item) => marketKeys.includes(item.marketKey))) {
+  for (const list of groupedSelections(entries, context.matchKeyById)) {
+    const first = list[0]!;
+    if (!marketKeys.includes(first.marketKey)) continue;
+    const best = [...list].sort((a, b) => b.price - a.price)[0]!;
+    const matchKey = context.matchKeyById.get(first.sourceEventId) ?? first.sourceEventId;
+    const fixture = context.fixtureByMatchKey.get(matchKey);
+    const sourceCount = new Set(list.map((item) => `${item.provider}:${item.bookmakerKey}`)).size;
     rows.push([
-      entry.event, entry.phase === "live" ? "CANLI" : "YAKLAŞAN", entry.market, entry.period, entry.selection, entry.line ?? "",
-      entry.bookmaker, entry.price, entry.capturedAt,
+      fixture ? `${fixture.homeTeam} - ${fixture.awayTeam}` : first.event,
+      fixture?.phase === "live" ? "CANLI" : "YAKLAŞAN",
+      first.market,
+      first.period,
+      first.selection,
+      first.line ?? "",
+      Number(best.price.toFixed(3)),
+      best.bookmaker,
+      sourceCount,
     ].map(safeValue));
   }
   return rows;
 }
 
-function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+function marketSummaryRows(entries: OddsHistoryEntry[], context: ActiveFixtureContext): SheetValue[][] {
   const rows: SheetValue[][] = [[
     "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi", "En İyi Oran", "En İyi Bookmaker",
     "Ortalama Oran", "Kaynak Sayısı", "Min Oran", "Max Oran",
   ]];
-  for (const list of groupedSelections(entries)) {
+  for (const list of groupedSelections(entries, context.matchKeyById)) {
     const first = list[0]!;
     const prices = list.map((item) => item.price).filter(Number.isFinite);
     if (prices.length === 0) continue;
     const best = [...list].sort((a, b) => b.price - a.price)[0]!;
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+    const matchKey = context.matchKeyById.get(first.sourceEventId) ?? first.sourceEventId;
+    const fixture = context.fixtureByMatchKey.get(matchKey);
+    const sourceCount = new Set(list.map((item) => `${item.provider}:${item.bookmakerKey}`)).size;
     rows.push([
-      first.event, first.phase === "live" ? "CANLI" : "YAKLAŞAN", first.market, first.period, first.selection, first.line ?? "",
-      Number(best.price.toFixed(3)), best.bookmaker, Number(avg.toFixed(3)), list.length,
+      fixture ? `${fixture.homeTeam} - ${fixture.awayTeam}` : first.event,
+      fixture?.phase === "live" ? "CANLI" : "YAKLAŞAN",
+      first.market, first.period, first.selection, first.line ?? "",
+      Number(best.price.toFixed(3)), best.bookmaker, Number(avg.toFixed(3)), sourceCount,
       Number(Math.min(...prices).toFixed(3)), Number(Math.max(...prices).toFixed(3)),
     ].map(safeValue));
   }
   return rows;
 }
 
-function couponCandidateRows(entries: OddsHistoryEntry[], fixtures: MatchFixture[]): SheetValue[][] {
+function couponCandidateRows(entries: OddsHistoryEntry[], context: ActiveFixtureContext): SheetValue[][] {
   const rows: SheetValue[][] = [[
     "Karar", "Puan", "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi",
     "En İyi Oran", "Bookmaker", "Piyasa Adil Oran", "Adil Olasılık %", "Piyasa Value %",
     "Kaynak", "Dağılım %", "Neden", "Güncelleme",
   ]];
-  for (const item of oneBestSelectionPerMatch(entries, fixtures).slice(0, 30)) {
+  for (const item of oneBestSelectionPerMatch(entries, context).slice(0, 30)) {
+    const fixture = context.fixtureByMatchKey.get(item.matchKey);
     rows.push([
       item.verdict,
       item.score,
-      item.event,
-      item.phase === "live" ? "CANLI" : "YAKLAŞAN",
+      fixture ? `${fixture.homeTeam} - ${fixture.awayTeam}` : item.event,
+      fixture?.phase === "live" ? "CANLI" : "YAKLAŞAN",
       item.market,
       item.period,
       item.selection,
@@ -342,18 +403,23 @@ function couponCandidateRows(entries: OddsHistoryEntry[], fixtures: MatchFixture
 }
 
 function tableRows(dataset: DailySheetDataset): SheetTable[] {
-  const fixturesForSheet = activeFixtures(dataset.fixtures);
-  const historyForSheet = activeHistory(dataset.oddsHistory, fixturesForSheet);
-  const activeEventNames = new Set(fixturesForSheet.map((fixture) => `${fixture.homeTeam} - ${fixture.awayTeam}`));
+  const context = activeFixtureContext(dataset.fixtures);
+  const historyForSheet = activeHistory(dataset.oddsHistory, context.activeIds);
+  const activeEventNames = new Set(context.all.map((fixture) => `${fixture.homeTeam} - ${fixture.awayTeam}`));
 
   const fixtures: SheetValue[][] = [[
-    "Tarih", "Maç Kimliği", "Lig", "Ev Sahibi", "Deplasman", "Başlangıç", "Durum",
-    "Son Oran Kontrolü", "Sonraki Oran Kontrolü", "Kaynak URL",
+    "Tarih", "Lig", "Ev Sahibi", "Deplasman", "Başlangıç", "Durum", "Son Oran Kontrolü", "Kaynak",
   ]];
-  for (const fixture of fixturesForSheet) {
+  for (const fixture of context.display) {
     fixtures.push([
-      dataset.date, fixture.sourceEventId, fixture.leagueName, fixture.homeTeam, fixture.awayTeam,
-      fixture.commenceTime, fixture.phase === "live" ? "CANLI" : "YAKLAŞAN", fixture.lastOddsCheckAt ?? "", fixture.nextOddsCheckAt ?? "", fixture.sourceUrl ?? "",
+      dataset.date,
+      fixture.leagueName,
+      fixture.homeTeam,
+      fixture.awayTeam,
+      fixture.commenceTime,
+      fixture.phase === "live" ? "CANLI" : "YAKLAŞAN",
+      fixture.lastOddsCheckAt ?? "",
+      fixture.provider,
     ].map(safeValue));
   }
 
@@ -379,15 +445,15 @@ function tableRows(dataset: DailySheetDataset): SheetTable[] {
   }
 
   return [
-    { title: "BUGUN_NE_OYNANIR", rows: simpleDecisionRows(historyForSheet, fixturesForSheet), columnWidths: [60, 95, 120, 240, 260, 85, 150, 90, 360] },
-    { title: "Kupon_Adaylari", rows: couponCandidateRows(historyForSheet, fixturesForSheet), columnWidths: [120, 70, 230, 90, 155, 105, 145, 80, 100, 155, 115, 105, 105, 80, 90, 330, 165] },
-    { title: "Pazar_Ozeti", rows: marketSummaryRows(historyForSheet), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
-    { title: "Gol_Alt_Ust", rows: marketRows(historyForSheet, ["total_goals", "both_teams_to_score"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
-    { title: "Kornerler", rows: marketRows(historyForSheet, ["corners"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
-    { title: "Kartlar", rows: marketRows(historyForSheet, ["cards"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
-    { title: "Maclar", rows: fixtures, columnWidths: [105, 115, 175, 165, 165, 155, 105, 165, 165, 280] },
-    { title: "Oran_Gecmisi", rows: history, columnWidths: [165, 115, 230, 100, 145, 110, 135, 80, 145, 85, 175] },
-    { title: "Sinyaller", rows: signals, columnWidths: [165, 115, 230, 145, 135, 80, 350, 165, 245] },
+    { title: "BUGUN_NE_OYNANIR", rows: simpleDecisionRows(historyForSheet, context), columnWidths: [60, 95, 120, 240, 260, 85, 150, 90, 360] },
+    { title: "Kupon_Adaylari", rows: couponCandidateRows(historyForSheet, context), columnWidths: [120, 70, 230, 90, 155, 105, 145, 80, 100, 155, 115, 105, 105, 80, 90, 330, 165] },
+    { title: "Pazar_Ozeti", rows: marketSummaryRows(historyForSheet, context), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
+    { title: "Gol_Alt_Ust", rows: marketRows(historyForSheet, ["total_goals", "both_teams_to_score"], context), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 100] },
+    { title: "Kornerler", rows: marketRows(historyForSheet, ["corners"], context), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 100] },
+    { title: "Kartlar", rows: marketRows(historyForSheet, ["cards"], context), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 100] },
+    { title: "Maclar", rows: fixtures, columnWidths: [105, 175, 165, 165, 155, 105, 165, 140] },
+    { title: "Oran_Gecmisi", rows: history, columnWidths: [165, 115, 230, 100, 145, 110, 135, 80, 145, 85, 175], hidden: true },
+    { title: "Sinyaller", rows: signals, columnWidths: [165, 115, 230, 145, 135, 80, 350, 165, 245], hidden: true },
   ];
 }
 
@@ -494,13 +560,14 @@ export class GoogleSheetsMirror implements DailySheetMirror {
         updateSheetProperties: {
           properties: {
             sheetId,
+            hidden: table.hidden ?? false,
             gridProperties: {
               frozenRowCount: 1,
               rowCount: Math.max(table.rows.length + 50, 1_000),
               columnCount: Math.max(table.columnWidths.length, 26),
             },
           },
-          fields: "gridProperties(frozenRowCount,rowCount,columnCount)",
+          fields: "hidden,gridProperties(frozenRowCount,rowCount,columnCount)",
         },
       });
       requests.push({
