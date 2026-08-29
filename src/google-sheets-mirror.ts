@@ -90,35 +90,7 @@ function latestHistory(entries: OddsHistoryEntry[]): OddsHistoryEntry[] {
   return [...latest.values()].sort((a, b) => a.event.localeCompare(b.event) || a.market.localeCompare(b.market));
 }
 
-function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetValue[][] {
-  const rows: SheetValue[][] = [[
-    "Mac",
-    "Durum",
-    "Pazar",
-    "Periyot",
-    "Secim",
-    "Cizgi",
-    "Bookmaker",
-    "Oran",
-    "Kayit Saati",
-  ]];
-  for (const entry of latestHistory(entries).filter((item) => marketKeys.includes(item.marketKey))) {
-    rows.push([
-      entry.event,
-      entry.phase,
-      entry.market,
-      entry.period,
-      entry.selection,
-      entry.line ?? "",
-      entry.bookmaker,
-      entry.price,
-      entry.capturedAt,
-    ].map(safeValue));
-  }
-  return rows;
-}
-
-function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+function groupedSelections(entries: OddsHistoryEntry[]): OddsHistoryEntry[][] {
   const groups = new Map<string, OddsHistoryEntry[]>();
   for (const entry of latestHistory(entries)) {
     const key = [entry.sourceEventId, entry.marketKey, entry.period, entry.selectionKey, entry.line ?? ""].join("|");
@@ -126,41 +98,114 @@ function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
     list.push(entry);
     groups.set(key, list);
   }
+  return [...groups.values()];
+}
 
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
+}
+
+function marketRows(entries: OddsHistoryEntry[], marketKeys: string[]): SheetValue[][] {
   const rows: SheetValue[][] = [[
-    "Mac",
-    "Durum",
-    "Pazar",
-    "Periyot",
-    "Secim",
-    "Cizgi",
-    "En Iyi Oran",
-    "En Iyi Bookmaker",
-    "Ortalama Oran",
-    "Kaynak Sayisi",
-    "Min Oran",
-    "Max Oran",
+    "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi", "Bookmaker", "Oran", "Kayit Saati",
   ]];
+  for (const entry of latestHistory(entries).filter((item) => marketKeys.includes(item.marketKey))) {
+    rows.push([
+      entry.event, entry.phase, entry.market, entry.period, entry.selection, entry.line ?? "",
+      entry.bookmaker, entry.price, entry.capturedAt,
+    ].map(safeValue));
+  }
+  return rows;
+}
 
-  for (const list of groups.values()) {
+function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+  const rows: SheetValue[][] = [[
+    "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi", "En Iyi Oran", "En Iyi Bookmaker",
+    "Ortalama Oran", "Kaynak Sayisi", "Min Oran", "Max Oran",
+  ]];
+  for (const list of groupedSelections(entries)) {
     const first = list[0]!;
     const prices = list.map((item) => item.price).filter(Number.isFinite);
     if (prices.length === 0) continue;
     const best = [...list].sort((a, b) => b.price - a.price)[0]!;
     const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length;
     rows.push([
-      first.event,
-      first.phase,
-      first.market,
-      first.period,
-      first.selection,
-      first.line ?? "",
-      Number(best.price.toFixed(3)),
-      best.bookmaker,
-      Number(avg.toFixed(3)),
-      list.length,
-      Number(Math.min(...prices).toFixed(3)),
-      Number(Math.max(...prices).toFixed(3)),
+      first.event, first.phase, first.market, first.period, first.selection, first.line ?? "",
+      Number(best.price.toFixed(3)), best.bookmaker, Number(avg.toFixed(3)), list.length,
+      Number(Math.min(...prices).toFixed(3)), Number(Math.max(...prices).toFixed(3)),
+    ].map(safeValue));
+  }
+  return rows;
+}
+
+function couponCandidateRows(entries: OddsHistoryEntry[]): SheetValue[][] {
+  const candidates = groupedSelections(entries).map((list) => {
+    const first = list[0]!;
+    const prices = list.map((item) => item.price).filter((price) => Number.isFinite(price) && price > 1);
+    if (prices.length === 0) return null;
+    const best = [...list].sort((a, b) => b.price - a.price)[0]!;
+    const fairOdds = median(prices);
+    const valuePercent = ((best.price / fairOdds) - 1) * 100;
+    const dispersionPercent = fairOdds > 0 ? ((Math.max(...prices) - Math.min(...prices)) / fairOdds) * 100 : 100;
+    const coverageScore = Math.min(list.length / 5, 1) * 35;
+    const agreementScore = Math.max(0, 1 - dispersionPercent / 12) * 35;
+    const valueScore = Math.min(Math.max(valuePercent, 0) / 8, 1) * 30;
+    const score = Math.round(coverageScore + agreementScore + valueScore);
+    const verdict = score >= 75 && valuePercent >= 2 && list.length >= 3
+      ? "GÜÇLÜ ADAY"
+      : score >= 58 && valuePercent > 0
+        ? "İZLE"
+        : "UZAK DUR";
+    const reason = `${list.length} kaynak | fiyat dağılımı %${dispersionPercent.toFixed(1)} | piyasa fiyat avantajı %${valuePercent.toFixed(1)}`;
+    return {
+      event: first.event,
+      phase: first.phase,
+      market: first.market,
+      period: first.period,
+      selection: first.selection,
+      line: first.line,
+      bookmaker: best.bookmaker,
+      bestPrice: best.price,
+      fairOdds,
+      fairProbability: 100 / fairOdds,
+      valuePercent,
+      sourceCount: list.length,
+      dispersionPercent,
+      score,
+      verdict,
+      reason,
+      capturedAt: best.capturedAt,
+    };
+  }).filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => b.score - a.score || b.valuePercent - a.valuePercent)
+    .slice(0, 30);
+
+  const rows: SheetValue[][] = [[
+    "Karar", "Puan", "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi",
+    "En Iyi Oran", "Bookmaker", "Piyasa Adil Oran", "Adil Olasilik %", "Piyasa Value %",
+    "Kaynak", "Dagilim %", "Neden", "Guncelleme",
+  ]];
+  for (const item of candidates) {
+    rows.push([
+      item.verdict,
+      item.score,
+      item.event,
+      item.phase,
+      item.market,
+      item.period,
+      item.selection,
+      item.line ?? "",
+      Number(item.bestPrice.toFixed(3)),
+      item.bookmaker,
+      Number(item.fairOdds.toFixed(3)),
+      Number(item.fairProbability.toFixed(1)),
+      Number(item.valuePercent.toFixed(1)),
+      item.sourceCount,
+      Number(item.dispersionPercent.toFixed(1)),
+      item.reason,
+      item.capturedAt,
     ].map(safeValue));
   }
   return rows;
@@ -168,87 +213,39 @@ function marketSummaryRows(entries: OddsHistoryEntry[]): SheetValue[][] {
 
 function tableRows(dataset: DailySheetDataset): SheetTable[] {
   const fixtures: SheetValue[][] = [[
-    "Tarih",
-    "Mac Kimligi",
-    "Lig",
-    "Ev Sahibi",
-    "Deplasman",
-    "Baslangic",
-    "Durum",
-    "Son Oran Kontrolu",
-    "Sonraki Oran Kontrolu",
-    "Kaynak URL",
+    "Tarih", "Mac Kimligi", "Lig", "Ev Sahibi", "Deplasman", "Baslangic", "Durum",
+    "Son Oran Kontrolu", "Sonraki Oran Kontrolu", "Kaynak URL",
   ]];
   for (const fixture of dataset.fixtures) {
     fixtures.push([
-      dataset.date,
-      fixture.sourceEventId,
-      fixture.leagueName,
-      fixture.homeTeam,
-      fixture.awayTeam,
-      fixture.commenceTime,
-      fixture.phase,
-      fixture.lastOddsCheckAt ?? "",
-      fixture.nextOddsCheckAt ?? "",
-      fixture.sourceUrl ?? "",
+      dataset.date, fixture.sourceEventId, fixture.leagueName, fixture.homeTeam, fixture.awayTeam,
+      fixture.commenceTime, fixture.phase, fixture.lastOddsCheckAt ?? "", fixture.nextOddsCheckAt ?? "", fixture.sourceUrl ?? "",
     ].map(safeValue));
   }
 
   const history: SheetValue[][] = [[
-    "Kayit Saati",
-    "Mac Kimligi",
-    "Mac",
-    "Durum",
-    "Pazar",
-    "Periyot",
-    "Secim",
-    "Cizgi",
-    "Bookmaker",
-    "Oran",
-    "Kaynak Guncelleme Saati",
+    "Kayit Saati", "Mac Kimligi", "Mac", "Durum", "Pazar", "Periyot", "Secim", "Cizgi",
+    "Bookmaker", "Oran", "Kaynak Guncelleme Saati",
   ]];
   for (const entry of dataset.oddsHistory) {
     history.push([
-      entry.capturedAt,
-      entry.sourceEventId,
-      entry.event,
-      entry.phase,
-      entry.market,
-      entry.period,
-      entry.selection,
-      entry.line ?? "",
-      entry.bookmaker,
-      entry.price,
-      entry.sourceUpdatedAt,
+      entry.capturedAt, entry.sourceEventId, entry.event, entry.phase, entry.market, entry.period,
+      entry.selection, entry.line ?? "", entry.bookmaker, entry.price, entry.sourceUpdatedAt,
     ].map(safeValue));
   }
 
   const signals: SheetValue[][] = [[
-    "Tespit Saati",
-    "Tur",
-    "Mac",
-    "Pazar",
-    "Secim",
-    "Cizgi",
-    "Aciklama",
-    "Telegram Saati",
-    "Sinyal Kimligi",
+    "Tespit Saati", "Tur", "Mac", "Pazar", "Secim", "Cizgi", "Aciklama", "Telegram Saati", "Sinyal Kimligi",
   ]];
   for (const signal of dataset.signals) {
     signals.push([
-      signal.detectedAt,
-      signal.type,
-      signal.event,
-      signal.market,
-      signal.selection,
-      signal.line ?? "",
-      signal.detail,
-      signal.notifiedAt ?? "",
-      signal.id,
+      signal.detectedAt, signal.type, signal.event, signal.market, signal.selection, signal.line ?? "",
+      signal.detail, signal.notifiedAt ?? "", signal.id,
     ].map(safeValue));
   }
 
   return [
+    { title: "Kupon_Adaylari", rows: couponCandidateRows(dataset.oddsHistory), columnWidths: [120, 70, 230, 90, 155, 105, 145, 80, 100, 155, 115, 105, 105, 80, 90, 330, 165] },
     { title: "Pazar_Ozeti", rows: marketSummaryRows(dataset.oddsHistory), columnWidths: [230, 90, 155, 105, 145, 80, 100, 155, 105, 100, 90, 90] },
     { title: "Gol_Alt_Ust", rows: marketRows(dataset.oddsHistory, ["total_goals", "both_teams_to_score"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
     { title: "Kornerler", rows: marketRows(dataset.oddsHistory, ["corners"]), columnWidths: [230, 90, 155, 105, 145, 80, 155, 90, 165] },
@@ -287,11 +284,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
       method: "POST",
       body: JSON.stringify({
         valueInputOption: "RAW",
-        data: tables.map((table) => ({
-          range: `'${table.title}'!A1`,
-          majorDimension: "ROWS",
-          values: table.rows,
-        })),
+        data: tables.map((table) => ({ range: `'${table.title}'!A1`, majorDimension: "ROWS", values: table.rows })),
       }),
     });
   }
@@ -313,10 +306,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
     signer.update(unsigned);
     signer.end();
     const assertion = `${unsigned}.${base64Url(signer.sign(this.privateKey))}`;
-    const body = new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth2:grant-type:jwt-bearer",
-      assertion,
-    });
+    const body = new URLSearchParams({ grant_type: "urn:ietf:params:oauth2:grant-type:jwt-bearer", assertion });
     const response = await fetch(TOKEN_URL, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -334,8 +324,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
 
   private async ensureSheets(token: string, titles: string[]): Promise<Map<string, number>> {
     const metadata = await this.request<SpreadsheetMetadata>(
-      `${SHEETS_API}/${encodeURIComponent(this.id)}?fields=sheets.properties(sheetId,title)`,
-      token,
+      `${SHEETS_API}/${encodeURIComponent(this.id)}?fields=sheets.properties(sheetId,title)`, token,
     );
     const result = new Map<string, number>();
     for (const sheet of metadata.sheets ?? []) {
@@ -350,8 +339,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
         body: JSON.stringify({ requests: missing.map((title) => ({ addSheet: { properties: { title } } })) }),
       });
       const refreshed = await this.request<SpreadsheetMetadata>(
-        `${SHEETS_API}/${encodeURIComponent(this.id)}?fields=sheets.properties(sheetId,title)`,
-        token,
+        `${SHEETS_API}/${encodeURIComponent(this.id)}?fields=sheets.properties(sheetId,title)`, token,
       );
       for (const sheet of refreshed.sheets ?? []) {
         const title = sheet.properties?.title;
@@ -359,9 +347,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
         if (title && typeof id === "number") result.set(title, id);
       }
     }
-    for (const title of titles) {
-      if (!result.has(title)) throw new Error(`Google Sheet sekmesi olusturulamadi: ${title}`);
-    }
+    for (const title of titles) if (!result.has(title)) throw new Error(`Google Sheet sekmesi olusturulamadi: ${title}`);
     return result;
   }
 
@@ -418,6 +404,28 @@ export class GoogleSheetsMirror implements DailySheetMirror {
           },
         });
       });
+
+      if (table.title === "Kupon_Adaylari" && table.rows.length > 1) {
+        const verdictRules = [
+          { text: "GÜÇLÜ ADAY", backgroundColor: { red: 0.82, green: 0.94, blue: 0.84 } },
+          { text: "İZLE", backgroundColor: { red: 1, green: 0.95, blue: 0.76 } },
+          { text: "UZAK DUR", backgroundColor: { red: 0.97, green: 0.82, blue: 0.82 } },
+        ];
+        for (const rule of verdictRules) {
+          requests.push({
+            addConditionalFormatRule: {
+              rule: {
+                ranges: [{ sheetId, startRowIndex: 1, endRowIndex: table.rows.length, startColumnIndex: 0, endColumnIndex: 1 }],
+                booleanRule: {
+                  condition: { type: "TEXT_EQ", values: [{ userEnteredValue: rule.text }] },
+                  format: { backgroundColor: rule.backgroundColor, textFormat: { bold: true } },
+                },
+              },
+              index: 0,
+            },
+          });
+        }
+      }
     }
     await this.request(`${SHEETS_API}/${encodeURIComponent(this.id)}:batchUpdate`, token, {
       method: "POST",
