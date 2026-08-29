@@ -10,7 +10,7 @@ describe("FootballDataFixtureProvider", () => {
   it("aktif/yaklasan maclari fixture olarak getirir ve bitmis maci atar", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-29T12:00:00.000Z"));
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({
       matches: [
         {
           id: 1,
