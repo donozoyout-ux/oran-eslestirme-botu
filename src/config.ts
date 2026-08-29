@@ -1,5 +1,6 @@
 import "dotenv/config";
 import path from "node:path";
+import { DEFAULT_LEAGUE_SCOPE, type LeagueScope } from "./league-scope.js";
 
 export type ProviderName = "mock" | "the_odds_api" | "betexplorer_scraper";
 
@@ -13,6 +14,7 @@ export interface AppConfig {
   scraperPageTimeoutMs: number;
   scraperWaitMs: number;
   scraperAllowVisibleBookmakerFallback: boolean;
+  leagueScope: LeagueScope;
   prematchTrackHours: number;
   prematchFarPollMinutes: number;
   prematchNearPollMinutes: number;
@@ -68,6 +70,12 @@ function booleanValue(name: string, fallback: boolean): boolean {
   throw new Error(`${name} true veya false olmali.`);
 }
 
+function leagueScopeValue(): LeagueScope {
+  const value = optional("SCRAPER_LEAGUE_SCOPE") ?? DEFAULT_LEAGUE_SCOPE;
+  if (value === "all" || value === DEFAULT_LEAGUE_SCOPE) return value;
+  throw new Error(`SCRAPER_LEAGUE_SCOPE all veya ${DEFAULT_LEAGUE_SCOPE} olmali.`);
+}
+
 export function loadConfig(): AppConfig {
   const configuredProvider = optional("ODDS_PROVIDER") ?? "mock";
   const upgradeLegacyProductionMock =
@@ -89,6 +97,7 @@ export function loadConfig(): AppConfig {
     scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 60_000, { min: 5_000, max: 60_000 }),
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
     scraperAllowVisibleBookmakerFallback: booleanValue("SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK", true),
+    leagueScope: leagueScopeValue(),
     prematchTrackHours: numberValue("PREMATCH_TRACK_HOURS", 6, { min: 1, max: 48 }),
     prematchFarPollMinutes: numberValue("PREMATCH_FAR_POLL_MINUTES", 60, { min: 1, max: 720 }),
     prematchNearPollMinutes: numberValue("PREMATCH_NEAR_POLL_MINUTES", 15, { min: 1, max: 180 }),
