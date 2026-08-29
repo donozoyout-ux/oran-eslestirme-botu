@@ -41,6 +41,45 @@ function spreadsheetId(value: string): string {
   return result;
 }
 
+/**
+ * Render's environment editor accepts both literal `\\n` characters and real
+ * line breaks. It is also common to paste either a JSON string or the whole
+ * downloaded Google service-account JSON file by mistake. Normalize those
+ * safe variants here so the OAuth signer always receives a PEM value.
+ */
+function normalizePrivateKey(value: string): string {
+  let candidate = value.trim();
+
+  if (candidate.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(candidate) as { private_key?: unknown };
+      if (typeof parsed.private_key === "string") candidate = parsed.private_key;
+    } catch {
+      // Leave it unchanged; the validation below provides a useful error.
+    }
+  } else if (candidate.startsWith('"') && candidate.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed === "string") candidate = parsed;
+    } catch {
+      candidate = candidate.slice(1, -1);
+    }
+  }
+
+  const normalized = candidate
+    .replaceAll("\\r\\n", "\n")
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\r", "\r")
+    .trim();
+
+  if (!normalized.startsWith("-----BEGIN PRIVATE KEY-----") || !normalized.endsWith("-----END PRIVATE KEY-----")) {
+    throw new Error(
+      "GOOGLE_PRIVATE_KEY gecersiz. Render'a yalnizca private_key degerini veya indirilen servis hesabi JSON'unun tamamini ekleyin.",
+    );
+  }
+  return `${normalized}\n`;
+}
+
 function safeValue(value: unknown): SheetValue {
   if (value === null || value === undefined) return "";
   if (typeof value === "number" || typeof value === "boolean") return value;
@@ -147,7 +186,7 @@ export class GoogleSheetsMirror implements DailySheetMirror {
 
   constructor(private readonly options: GoogleSheetsMirrorOptions) {
     this.id = spreadsheetId(options.spreadsheetId);
-    this.privateKey = options.privateKey.replaceAll("\\n", "\n");
+    this.privateKey = normalizePrivateKey(options.privateKey);
     this.requestTimeoutMs = options.requestTimeoutMs ?? 20_000;
     this.url = `https://docs.google.com/spreadsheets/d/${this.id}/edit`;
   }
@@ -319,4 +358,3 @@ export class GoogleSheetsMirror implements DailySheetMirror {
     if (!response.ok) throw new Error(`Google Sheets ${response.status}: ${text.slice(0, 500)}`);
     return (text ? JSON.parse(text) : {}) as T;
   }
-}
