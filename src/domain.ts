@@ -63,7 +63,7 @@ export interface OddsMatch {
 
 export interface OddsAnalysisSignal {
   id: string;
-  type: "close_odds" | "odds_drop" | "odds_rise";
+  type: "close_odds" | "odds_drop" | "odds_rise" | "source_outlier" | "arbitrage";
   event: string;
   market: string;
   selection: string;
@@ -74,6 +74,11 @@ export interface OddsAnalysisSignal {
   openingPrice?: number;
   currentPrice?: number;
   changePercent?: number;
+  consensusPrice?: number;
+  fairProbabilityPercent?: number;
+  sourceCount?: number;
+  confidenceScore?: number;
+  arbitrageMarginPercent?: number;
   notifiedAt?: string;
 }
 
@@ -103,5 +108,8 @@ export interface RunSummary {
   matchesFound: number;
   alertsSent: number;
   movementAlertsSent: number;
+  marketAnalysisAlertsSent?: number;
+  consensusSignalsFound?: number;
+  arbitrageFound?: number;
   alertsSuppressed: number;
 }
