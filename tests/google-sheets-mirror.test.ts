@@ -8,6 +8,50 @@ afterEach(() => {
 });
 
 describe("Google Sheets aynasi", () => {
+  it("Render'daki kacisli veya tum JSON anahtarini PEM olarak kullanir", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    const privateKeyWithEscapedNewlines = pem.replaceAll("\n", "\\n");
+    let metadataReads = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("oauth2.googleapis.com")) {
+        return new Response(JSON.stringify({ access_token: "test-token", expires_in: 3600 }), { status: 200 });
+      }
+      if (url.includes("?fields=sheets.properties")) {
+        metadataReads += 1;
+        return new Response(
+          JSON.stringify(
+            metadataReads === 1
+              ? { sheets: [] }
+              : {
+                  sheets: [
+                    { properties: { sheetId: 1, title: "Maclar" } },
+                    { properties: { sheetId: 2, title: "Oran_Gecmisi" } },
+                    { properties: { sheetId: 3, title: "Sinyaller" } },
+                  ],
+                },
+          ),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mirror = new GoogleSheetsMirror({
+      spreadsheetId: "1234567890abcdefghijklmnopqrstuv",
+      serviceAccountEmail: "bot@example.iam.gserviceaccount.com",
+      privateKey: JSON.stringify({ type: "service_account", private_key: privateKeyWithEscapedNewlines }),
+    });
+    await mirror.sync({ date: "2026-08-29", fixtures: [], oddsHistory: [], signals: [] });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("oauth2.googleapis.com"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("gerekli sekmeleri acar ve uc tabloyu ham degerlerle yazar", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     let metadataReads = 0;
