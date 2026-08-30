@@ -17,12 +17,16 @@ export class CompositeOddsProvider implements OddsProvider {
     const results = await Promise.allSettled(this.providers.map((provider) => provider.fetchQuotes(signal)));
     const quotes: OddsQuote[] = [];
     const errors: string[] = [];
+    let fulfilledProviders = 0;
+
     for (let index = 0; index < results.length; index += 1) {
       const result = results[index]!;
       if (result.status === "fulfilled") {
+        fulfilledProviders += 1;
         quotes.push(...result.value);
         continue;
       }
+
       const provider = this.providers[index]!;
       const reason = errorMessage(result.reason);
       errors.push(`${provider.name}: ${reason}`);
@@ -31,7 +35,17 @@ export class CompositeOddsProvider implements OddsProvider {
         error: reason,
       });
     }
+
     if (quotes.length > 0) return quotes;
+
+    if (fulfilledProviders > 0) {
+      logger.warn("Veri kaynaklarindan yanit alindi ancak bu tur kullanilabilir oran gelmedi.", {
+        fulfilledProviders,
+        failedProviders: errors.length,
+      });
+      return [];
+    }
+
     throw new Error(`Tum oran kaynaklari basarisiz: ${errors.join("; ")}`);
   }
 
