@@ -6,6 +6,7 @@ import { BetExplorerScraperProvider } from "./betexplorer-scraper-provider.js";
 import { CompositeOddsProvider } from "./composite-provider.js";
 import { ApiFootballProvider } from "./api-football-provider.js";
 import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js";
+import { ResilientOddsProvider } from "./resilient-provider.js";
 
 function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   if (!config.oddsApiKey) throw new Error("ODDS_API_KEY eksik.");
@@ -18,8 +19,8 @@ function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   });
 }
 
-function betExplorerProvider(config: AppConfig): BetExplorerScraperProvider {
-  return new BetExplorerScraperProvider({
+function betExplorerProvider(config: AppConfig): OddsProvider {
+  const scraper = new BetExplorerScraperProvider({
     bookmakerKeys: config.bookmakerKeys,
     maxMatches: config.scraperMaxMatches,
     maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
@@ -34,6 +35,7 @@ function betExplorerProvider(config: AppConfig): BetExplorerScraperProvider {
     livePollMinutes: config.livePollMinutes,
     executablePath: config.chromiumExecutablePath,
   });
+  return new ResilientOddsProvider(scraper);
 }
 
 export function createProvider(config: AppConfig): OddsProvider {
