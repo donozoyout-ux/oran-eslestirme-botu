@@ -44,4 +44,40 @@ describe("birlestirilmis oran saglayicisi", () => {
     await expect(provider.fetchQuotes()).resolves.toEqual([quote("healthy")]);
     expect(provider.name).toBe("healthy+unavailable");
   });
+
+  it("en az bir kaynak cevap verdiyse sifir orani normal tur kabul eder", async () => {
+    const empty: OddsProvider = {
+      name: "empty",
+      async fetchQuotes() {
+        return [];
+      },
+    };
+    const unavailable: OddsProvider = {
+      name: "unavailable",
+      async fetchQuotes() {
+        throw new Error("gecici hata");
+      },
+    };
+    const provider = new CompositeOddsProvider([empty, unavailable]);
+
+    await expect(provider.fetchQuotes()).resolves.toEqual([]);
+  });
+
+  it("butun kaynaklar gercekten hata verdiginde hata dondurur", async () => {
+    const first: OddsProvider = {
+      name: "first",
+      async fetchQuotes() {
+        throw new Error("ilk hata");
+      },
+    };
+    const second: OddsProvider = {
+      name: "second",
+      async fetchQuotes() {
+        throw new Error("ikinci hata");
+      },
+    };
+    const provider = new CompositeOddsProvider([first, second]);
+
+    await expect(provider.fetchQuotes()).rejects.toThrow("Tum oran kaynaklari basarisiz");
+  });
 });
