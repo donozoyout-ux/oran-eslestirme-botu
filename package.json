@@ -11,6 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:local": "node scripts/local-runner.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run build && npm test",
