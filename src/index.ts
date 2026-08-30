@@ -7,6 +7,7 @@ import { OddsMonitor } from "./monitor.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
 import { createProvider } from "./providers/index.js";
 import { createServer } from "./server.js";
+import { sendTelegramStartupMessage } from "./telegram-health.js";
 
 try {
   const config = loadConfig();
@@ -43,9 +44,19 @@ try {
       pollIntervalSeconds: config.pollIntervalSeconds,
       surpriseOddsThreshold: config.surpriseOddsThreshold,
       googleSheetsEnabled: Boolean(googleSheetsMirror),
+      googleSheetsSyncMinutes: config.googleSheetsSyncMinutes,
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });
+
+    if (!config.dryRun) {
+      void sendTelegramStartupMessage(config.telegramBotToken!, config.telegramChatId!)
+        .then(() => logger.info("Telegram baslangic testi basarili."))
+        .catch((error) => logger.error("Telegram baslangic testi basarisiz.", { error: errorMessage(error) }));
+    } else {
+      logger.warn("Telegram bildirimleri kapali: DRY_RUN=true. Railway Variables icinde DRY_RUN=false yapin.");
+    }
+
     monitor.start();
   });
 

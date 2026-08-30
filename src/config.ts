@@ -142,7 +142,7 @@ export function loadConfig(): AppConfig {
     googleSheetsSpreadsheetId: optional("GOOGLE_SHEETS_SPREADSHEET_ID"),
     googleServiceAccountEmail: optional("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     googlePrivateKey: optional("GOOGLE_PRIVATE_KEY"),
-    googleSheetsSyncMinutes: numberValue("GOOGLE_SHEETS_SYNC_MINUTES", 15, { min: 5, max: 1_440 }),
+    googleSheetsSyncMinutes: numberValue("GOOGLE_SHEETS_SYNC_MINUTES", 1, { min: 1, max: 1_440 }),
   };
 
   if (config.provider === "the_odds_api" && !config.oddsApiKey) throw new Error("ODDS_PROVIDER=the_odds_api icin ODDS_API_KEY gerekli.");
