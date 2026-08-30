@@ -83,6 +83,13 @@ function leagueScopeValue(): LeagueScope {
   throw new Error(`SCRAPER_LEAGUE_SCOPE all veya ${DEFAULT_LEAGUE_SCOPE} olmali.`);
 }
 
+function chromiumExecutablePath(): string | undefined {
+  const configured = optional("CHROMIUM_EXECUTABLE_PATH");
+  if (configured) return configured;
+  if (process.platform === "linux") return "/usr/bin/chromium-browser";
+  return undefined;
+}
+
 export function loadConfig(): AppConfig {
   const configuredProvider = optional("ODDS_PROVIDER") ?? "mock";
   const upgradeLegacyProductionMock = configuredProvider === "mock" && process.env.NODE_ENV === "production" && !booleanValue("ALLOW_MOCK_IN_PRODUCTION", false);
@@ -117,7 +124,7 @@ export function loadConfig(): AppConfig {
     prematchNearPollMinutes: numberValue("PREMATCH_NEAR_POLL_MINUTES", 15, { min: 1, max: 180 }),
     prematchFinalPollMinutes: numberValue("PREMATCH_FINAL_POLL_MINUTES", 5, { min: 1, max: 60 }),
     livePollMinutes: numberValue("LIVE_POLL_MINUTES", 3, { min: 1, max: 30 }),
-    chromiumExecutablePath: optional("CHROMIUM_EXECUTABLE_PATH"),
+    chromiumExecutablePath: chromiumExecutablePath(),
     tolerancePercent: numberValue("ODDS_TOLERANCE_PERCENT", 2, { min: 0, max: 100 }),
     pollIntervalSeconds: numberValue("POLL_INTERVAL_SECONDS", 60, { min: 10, max: 86_400 }),
     maxQuoteAgeSeconds: numberValue("MAX_QUOTE_AGE_SECONDS", 300, { min: 1, max: 86_400 }),
