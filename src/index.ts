@@ -53,6 +53,8 @@ try {
       void sendTelegramStartupMessage(config.telegramBotToken!, config.telegramChatId!)
         .then(() => logger.info("Telegram baslangic testi basarili."))
         .catch((error) => logger.error("Telegram baslangic testi basarisiz.", { error: errorMessage(error) }));
+    } else {
+      logger.warn("Telegram bildirimleri kapali: DRY_RUN=true. Railway Variables icinde DRY_RUN=false yapin.");
     }
 
     monitor.start();
