@@ -1,16 +1,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryAlertStore } from "../src/alert-store.js";
 import { JsonDailyMatchSheet } from "../src/daily-match-sheet.js";
 import type { Notifier, OddsAnalysisSignal, OddsMatch, OddsProvider, OddsQuote } from "../src/domain.js";
 import { OddsMonitor } from "../src/monitor.js";
 
-const timestamp = new Date().toISOString();
+const FIXED_NOW = new Date("2026-08-30T12:00:00.000Z");
+const timestamp = FIXED_NOW.toISOString();
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const directory of temporaryDirectories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
@@ -28,7 +30,7 @@ const baseQuote: OddsQuote = {
   leagueName: "Test",
   homeTeam: "A Takimi",
   awayTeam: "B Takimi",
-  commenceTime: new Date(Date.now() + 3_600_000).toISOString(),
+  commenceTime: new Date(FIXED_NOW.getTime() + 3_600_000).toISOString(),
   phase: "prematch",
   marketKey: "match_winner_3way",
   marketName: "Mac Sonucu",
@@ -70,6 +72,8 @@ class MovingProvider implements OddsProvider {
 
 describe("OddsMonitor", () => {
   it("ayni bildirimi cooldown icinde ikinci kez gondermez", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
     const notifier = new CollectingNotifier();
     const monitor = new OddsMonitor(new StaticProvider(), notifier, new MemoryAlertStore(600), {
       tolerancePercent: 2,
@@ -90,6 +94,8 @@ describe("OddsMonitor", () => {
   });
 
   it("yuzde 8 oran hareketini Telegram bildiricisine bir kez yollar", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
     const notifier = new CollectingNotifier();
     const monitor = new OddsMonitor(new MovingProvider(), notifier, new MemoryAlertStore(600), {
       tolerancePercent: 2,
