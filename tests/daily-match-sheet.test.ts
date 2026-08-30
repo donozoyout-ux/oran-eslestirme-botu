@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { JsonDailyMatchSheet } from "../src/daily-match-sheet.js";
 import type { MatchFixture, OddsQuote } from "../src/domain.js";
 
 const temporaryDirectories: string[] = [];
+const FIXED_NOW = new Date("2026-08-30T12:00:00.000Z");
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const directory of temporaryDirectories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
@@ -42,6 +44,8 @@ function quote(price: number, updatedAt: string, commenceTime: string): OddsQuot
 
 describe("gunluk mac tablosu", () => {
   it("saglayicinin guncel fikstur katalogundan cikan maclari listeden kaldirir", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
     const sheet = createSheet();
     const now = new Date();
     const commenceTime = new Date(now.getTime() + 3_600_000).toISOString();
@@ -69,6 +73,8 @@ describe("gunluk mac tablosu", () => {
   });
 
   it("fiksturu ve oran gecmisini saklar, yuzde 8 hareketi sinyale cevirir", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
     const sheet = createSheet();
     const secondCapture = new Date();
     const firstCapture = new Date(secondCapture.getTime() - 60_000);
