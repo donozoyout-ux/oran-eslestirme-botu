@@ -2,6 +2,7 @@ import { JsonAlertStore } from "./alert-store.js";
 import { loadConfig } from "./config.js";
 import { JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { GoogleSheetsMirror } from "./google-sheets-mirror.js";
+import { enableRawOddsGoogleSheet } from "./google-sheets-raw-odds.js";
 import { enableSafeGoogleSheetRefresh } from "./google-sheets-safe-refresh.js";
 import { errorMessage, logger } from "./logger.js";
 import { OddsMonitor } from "./monitor.js";
@@ -19,11 +20,11 @@ try {
   const alertStore = new JsonAlertStore(config.stateFile, config.alertCooldownSeconds);
   const googleSheetsMirror =
     config.googleSheetsSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey
-      ? enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
+      ? enableRawOddsGoogleSheet(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
           spreadsheetId: config.googleSheetsSpreadsheetId,
           serviceAccountEmail: config.googleServiceAccountEmail,
           privateKey: config.googlePrivateKey,
-        }))
+        })))
       : undefined;
   const dailySheet = new JsonDailyMatchSheet(config.dailySheetFile, config.oddsMovementThresholdPercent, {
     mirror: googleSheetsMirror,
