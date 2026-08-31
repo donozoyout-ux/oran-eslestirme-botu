@@ -1,6 +1,7 @@
 import { JsonAlertStore } from "./alert-store.js";
 import { loadConfig } from "./config.js";
 import { JsonDailyMatchSheet } from "./daily-match-sheet.js";
+import { installGoogleOauthGrantTypeFix } from "./google-oauth-compat.js";
 import { GoogleResultsMirror } from "./google-results-mirror.js";
 import { GoogleSheetsMirror } from "./google-sheets-mirror.js";
 import { enableRawOddsGoogleSheet } from "./google-sheets-raw-odds.js";
@@ -13,6 +14,12 @@ import { ResultTrackingProvider } from "./providers/result-tracking-provider.js"
 import { ResultsTracker } from "./results-tracker.js";
 import { createServer } from "./server.js";
 import { sendTelegramStartupMessage } from "./telegram-health.js";
+
+// Railway gibi platformlarda Start Command bazen package.json'daki bootstrap'i
+// atlayip dogrudan dist/index.js calistirabiliyor. OAuth duzeltmesini burada da
+// kurarak Google Sheets baglantisini hangi baslatma yolu kullanilirsa kullanilsin
+// ayni hale getiriyoruz.
+installGoogleOauthGrantTypeFix();
 
 try {
   const config = loadConfig();
