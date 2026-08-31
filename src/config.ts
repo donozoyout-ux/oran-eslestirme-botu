@@ -29,6 +29,9 @@ export interface AppConfig {
   prematchFarPollMinutes: number;
   prematchNearPollMinutes: number;
   prematchFinalPollMinutes: number;
+  prematchAlertWindowMinutes: number;
+  prematchAlertMinSources: number;
+  prematchAlertMinConfidence: number;
   livePollMinutes: number;
   chromiumExecutablePath?: string;
   tolerancePercent: number;
@@ -123,6 +126,9 @@ export function loadConfig(): AppConfig {
     prematchFarPollMinutes: numberValue("PREMATCH_FAR_POLL_MINUTES", 60, { min: 1, max: 720 }),
     prematchNearPollMinutes: numberValue("PREMATCH_NEAR_POLL_MINUTES", 15, { min: 1, max: 180 }),
     prematchFinalPollMinutes: numberValue("PREMATCH_FINAL_POLL_MINUTES", 5, { min: 1, max: 60 }),
+    prematchAlertWindowMinutes: numberValue("PREMATCH_ALERT_WINDOW_MINUTES", 20, { min: 1, max: 180 }),
+    prematchAlertMinSources: numberValue("PREMATCH_ALERT_MIN_SOURCES", 3, { min: 2, max: 10 }),
+    prematchAlertMinConfidence: numberValue("PREMATCH_ALERT_MIN_CONFIDENCE", 70, { min: 0, max: 100 }),
     livePollMinutes: numberValue("LIVE_POLL_MINUTES", 3, { min: 1, max: 30 }),
     chromiumExecutablePath: chromiumExecutablePath(),
     tolerancePercent: numberValue("ODDS_TOLERANCE_PERCENT", 2, { min: 0, max: 100 }),
