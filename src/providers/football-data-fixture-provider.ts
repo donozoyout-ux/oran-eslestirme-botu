@@ -45,7 +45,7 @@ export class FootballDataFixtureProvider implements OddsProvider {
   private readonly baseUrl: string;
   private readonly requestTimeoutMs: number;
   private lastFixtures: MatchFixture[] = [];
-  private lastFetchAt = 0;
+  private fetchedDay: string | null = null;
   private budgetDay = dayKey(new Date());
   private requestsToday = 0;
 
@@ -57,11 +57,12 @@ export class FootballDataFixtureProvider implements OddsProvider {
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const now = new Date();
     this.resetBudgetIfNeeded(now);
-    if (this.lastFetchAt && now.getTime() - this.lastFetchAt < this.options.cacheMinutes * 60_000) return [];
+    const today = dayKey(now);
+    if (this.fetchedDay === today) return [];
     if (this.requestsToday >= this.options.dailyRequestBudget) return [];
 
     const query = new URLSearchParams({
-      dateFrom: dayKey(now),
+      dateFrom: today,
       dateTo: dayKey(addDays(now, 1)),
     });
     if (this.options.competitionCodes.length > 0) query.set("competitions", this.options.competitionCodes.join(","));
@@ -95,7 +96,7 @@ export class FootballDataFixtureProvider implements OddsProvider {
       });
     }
     this.lastFixtures = fixtures;
-    this.lastFetchAt = now.getTime();
+    this.fetchedDay = today;
     return [];
   }
 
@@ -108,5 +109,7 @@ export class FootballDataFixtureProvider implements OddsProvider {
     if (key === this.budgetDay) return;
     this.budgetDay = key;
     this.requestsToday = 0;
+    this.fetchedDay = null;
+    this.lastFixtures = [];
   }
 }
