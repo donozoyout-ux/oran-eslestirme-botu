@@ -9,11 +9,21 @@ import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js
 import { ResilientOddsProvider } from "./resilient-provider.js";
 import { RoleSeparatedOddsProvider } from "./role-separated-provider.js";
 
+const BIG_FIVE_ODDS_API_SPORT_KEYS = [
+  "soccer_epl",
+  "soccer_spain_la_liga",
+  "soccer_germany_bundesliga",
+  "soccer_italy_serie_a",
+  "soccer_france_ligue_one",
+] as const;
+
+const BIG_FIVE_FOOTBALL_DATA_CODES = ["PL", "PD", "BL1", "SA", "FL1"] as const;
+
 function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   if (!config.oddsApiKey) throw new Error("ODDS_API_KEY eksik.");
   return new TheOddsApiProvider({
     apiKey: config.oddsApiKey,
-    sportKeys: config.sportKeys,
+    sportKeys: [...BIG_FIVE_ODDS_API_SPORT_KEYS],
     bookmakerKeys: config.bookmakerKeys,
     regions: config.regions,
     maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
@@ -57,7 +67,7 @@ function footballDataProvider(config: AppConfig): FootballDataFixtureProvider | 
   if (!config.footballDataToken) return null;
   return new FootballDataFixtureProvider({
     apiKey: config.footballDataToken,
-    competitionCodes: config.footballDataCompetitionCodes,
+    competitionCodes: [...BIG_FIVE_FOOTBALL_DATA_CODES],
     cacheMinutes: config.footballDataCacheMinutes,
     dailyRequestBudget: config.footballDataDailyRequestBudget,
   });
@@ -67,7 +77,7 @@ export function createProvider(config: AppConfig): OddsProvider {
   if (config.provider === "mock") return new MockOddsProvider();
 
   // Acikca ODDS_PROVIDER=the_odds_api secilirse The Odds API ana kaynak olur.
-  // Normal production ayarinda bunu kullanmiyoruz.
+  // Lig kapsami yine sadece Avrupa Big Five ust ligleridir.
   if (config.provider === "the_odds_api") {
     const providers: OddsProvider[] = [theOddsApiProvider(config)];
     const apiFootball = apiFootballProvider(config);
@@ -77,12 +87,12 @@ export function createProvider(config: AppConfig): OddsProvider {
     return providers.length === 1 ? providers[0]! : new CompositeOddsProvider(providers);
   }
 
-  // Normal production gorev paylasimi:
+  // Normal production gorev paylasimi - sadece Big Five:
+  // Premier League, La Liga, Bundesliga, Serie A, Ligue 1.
   // 1) BetExplorer scraping: ana prematch + ek live oranlar.
   // 2) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
   // 3) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
   // 4) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
-  //    En fazla saatte bir denenir; normal polling dongusune girmez.
   const scraper = betExplorerScraper(config);
   const liveApi = apiFootballProvider(config) ?? undefined;
   const footballData = footballDataProvider(config);
