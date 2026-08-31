@@ -1,0 +1,2 @@
+Vercel redeploy marker: 2026-08-31
+This file intentionally exists to trigger a fresh Git-integrated Vercel deployment after BACKEND_URL changes.
