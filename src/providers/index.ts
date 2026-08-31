@@ -7,7 +7,7 @@ import { CompositeOddsProvider } from "./composite-provider.js";
 import { ApiFootballProvider } from "./api-football-provider.js";
 import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js";
 import { ResilientOddsProvider } from "./resilient-provider.js";
-import { TieredOddsProvider } from "./tiered-provider.js";
+import { RoleSeparatedOddsProvider } from "./role-separated-provider.js";
 
 function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   if (!config.oddsApiKey) throw new Error("ODDS_API_KEY eksik.");
@@ -66,8 +66,8 @@ function footballDataProvider(config: AppConfig): FootballDataFixtureProvider | 
 export function createProvider(config: AppConfig): OddsProvider {
   if (config.provider === "mock") return new MockOddsProvider();
 
-  // Kullanici ODDS_PROVIDER=the_odds_api diye acikca sectiyse eski davranis
-  // korunur: bu durumda The Odds API ana kaynaktir ve her tur kullanilabilir.
+  // Acikca ODDS_PROVIDER=the_odds_api secilirse The Odds API ana kaynak olur.
+  // Normal production ayarinda bunu kullanmiyoruz.
   if (config.provider === "the_odds_api") {
     const providers: OddsProvider[] = [theOddsApiProvider(config)];
     const apiFootball = apiFootballProvider(config);
@@ -77,22 +77,26 @@ export function createProvider(config: AppConfig): OddsProvider {
     return providers.length === 1 ? providers[0]! : new CompositeOddsProvider(providers);
   }
 
-  // Normal production modu: BetExplorer + API-Football ana oran kaynaklari.
-  // football-data sadece fikstur kaynagidir. ODDS_API_KEY mevcut olsa bile
-  // The Odds API normal dongude cagrilmaz; sadece tum ana oran kaynaklari
-  // gercekten hata verirse son-care fallback olarak kullanilir.
-  const primaryProviders: OddsProvider[] = [betExplorerScraper(config)];
-  const apiFootball = apiFootballProvider(config);
-  if (apiFootball) primaryProviders.push(apiFootball);
-
-  const fixtureProviders: OddsProvider[] = [];
+  // Normal production gorev paylasimi:
+  // 1) BetExplorer scraping: ana prematch + ek live oranlar.
+  // 2) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
+  // 3) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
+  // 4) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
+  //    En fazla saatte bir denenir; normal polling dongusune girmez.
+  const scraper = betExplorerScraper(config);
+  const liveApi = apiFootballProvider(config) ?? undefined;
   const footballData = footballDataProvider(config);
-  if (footballData) fixtureProviders.push(footballData);
-
+  const fixtureProviders = footballData ? [footballData] : [];
   const fallbackProvider = config.oddsApiKey ? theOddsApiProvider(config) : undefined;
-  const tiered = new TieredOddsProvider(primaryProviders, fixtureProviders, fallbackProvider);
 
-  // Fallback de hata verirse veya fallback yoksa monitor tamamen cokmesin;
-  // son bilinen fikstur katalogu ve Sheet temizleme dongusu devam etsin.
-  return new ResilientOddsProvider(tiered);
+  const routed = new RoleSeparatedOddsProvider(
+    scraper,
+    liveApi,
+    fixtureProviders,
+    fallbackProvider,
+    { fallbackCooldownMinutes: 60 },
+  );
+
+  // Tek tek kaynak hatalari monitor/Sheet dongusunu durdurmasin.
+  return new ResilientOddsProvider(routed);
 }
