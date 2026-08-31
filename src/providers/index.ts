@@ -1,10 +1,12 @@
 import type { AppConfig } from "../config.js";
 import type { OddsProvider } from "../domain.js";
+import { setProviderDiagnostic } from "../provider-diagnostics.js";
 import { MockOddsProvider } from "./mock-provider.js";
 import { TheOddsApiProvider } from "./the-odds-api-provider.js";
 import { BetExplorerScraperProvider } from "./betexplorer-scraper-provider.js";
 import { CompositeOddsProvider } from "./composite-provider.js";
 import { ApiFootballProvider } from "./api-football-provider.js";
+import { ManagedApiFootballProvider } from "./api-football-managed-provider.js";
 import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js";
 import { ResilientOddsProvider } from "./resilient-provider.js";
 import { RoleSeparatedOddsProvider } from "./role-separated-provider.js";
@@ -48,10 +50,24 @@ function betExplorerScraper(config: AppConfig): BetExplorerScraperProvider {
   });
 }
 
-function apiFootballProvider(config: AppConfig): ApiFootballProvider | null {
-  if (!config.apiFootballKey) return null;
-  return new ApiFootballProvider({
-    apiKey: config.apiFootballKey,
+function apiFootballProvider(config: AppConfig): OddsProvider | null {
+  if (!config.apiFootballKey) {
+    setProviderDiagnostic("api_football", {
+      enabled: false,
+      status: "disabled",
+      leagueScope: "Premier League, La Liga, Bundesliga, Serie A, Ligue 1",
+      fixtureCount: 0,
+      quoteCount: 0,
+      lastProviderRunAt: null,
+      lastSuccessAt: null,
+      lastError: "API_FOOTBALL_KEY ayarlanmamis.",
+      nextFixtureRetryAt: null,
+    });
+    return null;
+  }
+
+  const factory = (): ApiFootballProvider => new ApiFootballProvider({
+    apiKey: config.apiFootballKey!,
     bookmakerKeys: config.bookmakerKeys,
     maxFixtures: config.apiFootballMaxFixtures,
     fixtureCacheMinutes: config.apiFootballFixtureCacheMinutes,
@@ -61,6 +77,8 @@ function apiFootballProvider(config: AppConfig): ApiFootballProvider | null {
     leagueScope: config.leagueScope,
     maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
   });
+
+  return new ManagedApiFootballProvider(factory, { retryMinutes: 15 });
 }
 
 function footballDataProvider(config: AppConfig): FootballDataFixtureProvider | null {
