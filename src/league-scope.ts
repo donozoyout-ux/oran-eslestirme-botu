@@ -1,7 +1,6 @@
-export const DEFAULT_LEAGUE_SCOPE = "europe_big5_topflight" as const;
-export const LEGACY_LEAGUE_SCOPE = "turkey_europe_top10_big5_tier3" as const;
+export const DEFAULT_LEAGUE_SCOPE = "turkey_europe_top10_big5_tier3" as const;
 
-export type LeagueScope = typeof DEFAULT_LEAGUE_SCOPE | typeof LEGACY_LEAGUE_SCOPE | "all";
+export type LeagueScope = typeof DEFAULT_LEAGUE_SCOPE | "all";
 
 const BIG_FIVE_TOP_FLIGHT: Readonly<Record<string, readonly string[]>> = {
   england: ["premier-league"],
