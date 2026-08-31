@@ -50,7 +50,7 @@ function monitorOptions() {
     pollIntervalSeconds: 60,
     prematchAlertWindowMinutes: 20,
     prematchAlertMinSources: 3,
-    prematchAlertMinConfidence: 70,
+    prematchAlertMinConfidence: 60,
   };
 }
 
