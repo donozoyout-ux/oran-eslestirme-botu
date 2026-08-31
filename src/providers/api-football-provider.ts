@@ -61,7 +61,6 @@ interface CachedFixtureOdds {
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "SUSP", "INT"]);
 const FINISHED_STATUSES = new Set(["FT", "AET", "PEN", "CANC", "ABD", "AWD", "WO", "PST"]);
-const LIVE_START_LOOKAHEAD_MINUTES = 10;
 
 function dayKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -166,10 +165,9 @@ export class ApiFootballProvider implements OddsProvider {
   private readonly baseUrl: string;
   private readonly requestTimeoutMs: number;
   private scheduledFixtures: MatchFixture[] = [];
-  private liveFixtures: MatchFixture[] = [];
-  private fixtureFetchedAt = 0;
-  private liveFixtureFetchedAt = 0;
+  private fixtureFetchedDay: string | null = null;
   private readonly oddsCache = new Map<string, CachedFixtureOdds>();
+  private readonly lastOddsCheckByFixture = new Map<string, number>();
   private budgetDay = dayKey(new Date());
   private requestsToday = 0;
   private reportedRemaining: number | null = null;
@@ -183,11 +181,10 @@ export class ApiFootballProvider implements OddsProvider {
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const now = new Date();
     this.resetBudgetIfNeeded(now);
-    await this.refreshFixturesIfDue(now, signal);
-    await this.refreshLiveFixturesIfDue(now, signal);
+    await this.refreshDailyFixturesIfNeeded(now, signal);
 
-    const selected = this.selectFixtures(now);
-    await Promise.all(selected.map((fixture) => this.refreshFixtureOddsIfDue(fixture, now, signal)));
+    const selected = this.selectLiveFixtures(now);
+    await Promise.all(selected.map((fixture) => this.refreshLiveOddsIfDue(fixture, now, signal)));
 
     const activeIds = new Set(selected.map((fixture) => fixture.sourceEventId));
     return [...this.oddsCache.entries()]
@@ -200,28 +197,39 @@ export class ApiFootballProvider implements OddsProvider {
   }
 
   private currentFixtures(now: Date): MatchFixture[] {
-    const byId = new Map<string, MatchFixture>();
+    const nowMs = now.getTime();
     const maxLiveAgeMs = this.options.maxLiveEventAgeMinutes * 60_000;
+    const fixtures: MatchFixture[] = [];
+
     for (const fixture of this.scheduledFixtures) {
       const kickoff = Date.parse(fixture.commenceTime);
       if (!Number.isFinite(kickoff)) continue;
-      if (fixture.phase === "prematch" && kickoff < now.getTime()) continue;
-      if (fixture.phase === "live" && now.getTime() - kickoff > maxLiveAgeMs) continue;
-      byId.set(fixture.sourceEventId, fixture);
+
+      const inferredPhase: EventPhase = fixture.phase === "live" || kickoff <= nowMs ? "live" : "prematch";
+      if (inferredPhase === "live" && nowMs - kickoff > maxLiveAgeMs) continue;
+
+      const lastOddsCheck = this.lastOddsCheckByFixture.get(fixture.sourceEventId);
+      fixtures.push({
+        ...fixture,
+        phase: inferredPhase,
+        ...(lastOddsCheck === undefined ? {} : { lastOddsCheckAt: new Date(lastOddsCheck).toISOString() }),
+        nextOddsCheckAt:
+          inferredPhase === "live"
+            ? new Date(Math.max(nowMs, (lastOddsCheck ?? nowMs) + this.options.liveCacheMinutes * 60_000)).toISOString()
+            : fixture.commenceTime,
+      });
     }
-    for (const fixture of this.liveFixtures) {
-      const kickoff = Date.parse(fixture.commenceTime);
-      if (!Number.isFinite(kickoff) || now.getTime() - kickoff > maxLiveAgeMs) continue;
-      byId.set(fixture.sourceEventId, fixture);
-    }
-    return [...byId.values()];
+
+    return fixtures;
   }
 
-  private selectFixtures(now: Date): MatchFixture[] {
+  private selectLiveFixtures(now: Date): MatchFixture[] {
     return this.currentFixtures(now)
+      .filter((fixture) => fixture.phase === "live")
       .sort((a, b) => {
-        if (a.phase !== b.phase) return a.phase === "live" ? -1 : 1;
-        return Date.parse(a.commenceTime) - Date.parse(b.commenceTime);
+        const lastA = this.lastOddsCheckByFixture.get(a.sourceEventId) ?? 0;
+        const lastB = this.lastOddsCheckByFixture.get(b.sourceEventId) ?? 0;
+        return lastA - lastB || Date.parse(a.commenceTime) - Date.parse(b.commenceTime);
       })
       .slice(0, this.options.maxFixtures);
   }
@@ -245,54 +253,33 @@ export class ApiFootballProvider implements OddsProvider {
     };
   }
 
-  private async refreshFixturesIfDue(now: Date, signal?: AbortSignal): Promise<void> {
-    if (this.fixtureFetchedAt && now.getTime() - this.fixtureFetchedAt < this.options.fixtureCacheMinutes * 60_000) return;
+  private async refreshDailyFixturesIfNeeded(now: Date, signal?: AbortSignal): Promise<void> {
+    const date = dayKey(now);
+    if (this.fixtureFetchedDay === date) return;
     if (!this.canRequest()) return;
 
-    const date = dayKey(now);
     const payload = await this.request<ApiFixture>(`/fixtures?date=${encodeURIComponent(date)}&timezone=Europe%2FIstanbul`, signal);
     this.scheduledFixtures = payload.map((item) => this.fixtureFromApi(item)).filter((fixture): fixture is MatchFixture => fixture !== null);
-    this.fixtureFetchedAt = now.getTime();
-  }
+    this.fixtureFetchedDay = date;
 
-  private shouldCheckLive(now: Date): boolean {
-    if (this.liveFixtures.length > 0) return true;
-    const nowMs = now.getTime();
-    const lookAheadMs = LIVE_START_LOOKAHEAD_MINUTES * 60_000;
-    const maxAgeMs = this.options.maxLiveEventAgeMinutes * 60_000;
-    return this.scheduledFixtures.some((fixture) => {
-      const kickoff = Date.parse(fixture.commenceTime);
-      return Number.isFinite(kickoff) && kickoff <= nowMs + lookAheadMs && kickoff >= nowMs - maxAgeMs;
-    });
-  }
-
-  private async refreshLiveFixturesIfDue(now: Date, signal?: AbortSignal): Promise<void> {
-    if (!this.shouldCheckLive(now)) return;
-    if (this.liveFixtureFetchedAt && now.getTime() - this.liveFixtureFetchedAt < this.options.liveCacheMinutes * 60_000) return;
-    if (!this.canRequest()) return;
-
-    const payload = await this.request<ApiFixture>("/fixtures?live=all&timezone=Europe%2FIstanbul", signal);
-    this.liveFixtures = payload
-      .map((item) => this.fixtureFromApi(item))
-      .filter((fixture): fixture is MatchFixture => fixture?.phase === "live");
-    this.liveFixtureFetchedAt = now.getTime();
-    logger.info("API-Football canlı maç taraması tamamlandı.", {
-      liveFixtures: this.liveFixtures.length,
+    logger.info("API-Football günlük maç listesi kaydedildi; canlı durum saatten takip edilecek.", {
+      fixtures: this.scheduledFixtures.length,
       requestsToday: this.requestsToday,
       dailyBudget: this.options.dailyRequestBudget,
     });
   }
 
-  private async refreshFixtureOddsIfDue(fixture: MatchFixture, now: Date, signal?: AbortSignal): Promise<void> {
-    const cached = this.oddsCache.get(fixture.sourceEventId);
-    const cacheMinutes = fixture.phase === "live" ? this.options.liveCacheMinutes : this.options.prematchCacheMinutes;
-    if (cached && cached.phase === fixture.phase && now.getTime() - cached.fetchedAt < cacheMinutes * 60_000) return;
+  private async refreshLiveOddsIfDue(fixture: MatchFixture, now: Date, signal?: AbortSignal): Promise<void> {
+    if (fixture.phase !== "live") return;
+
+    const lastAttempt = this.lastOddsCheckByFixture.get(fixture.sourceEventId);
+    if (lastAttempt !== undefined && now.getTime() - lastAttempt < this.options.liveCacheMinutes * 60_000) return;
     if (!this.canRequest()) return;
 
-    const endpoint = fixture.phase === "live" ? "/odds/live" : "/odds";
-    const payload = await this.request<ApiOddsItem>(`${endpoint}?fixture=${encodeURIComponent(fixture.sourceEventId)}`, signal);
+    this.lastOddsCheckByFixture.set(fixture.sourceEventId, now.getTime());
+    const payload = await this.request<ApiOddsItem>(`/odds/live?fixture=${encodeURIComponent(fixture.sourceEventId)}`, signal);
     const quotes = this.mapOdds(payload, fixture, now);
-    this.oddsCache.set(fixture.sourceEventId, { phase: fixture.phase, fetchedAt: now.getTime(), quotes });
+    this.oddsCache.set(fixture.sourceEventId, { phase: "live", fetchedAt: now.getTime(), quotes });
   }
 
   private mapOdds(items: ApiOddsItem[], fixture: MatchFixture, now: Date): OddsQuote[] {
@@ -341,7 +328,7 @@ export class ApiFootballProvider implements OddsProvider {
               homeTeam: fixture.homeTeam,
               awayTeam: fixture.awayTeam,
               commenceTime: fixture.commenceTime,
-              phase: fixture.phase,
+              phase: "live",
               marketKey: market.key,
               marketName: market.name,
               period,
@@ -364,6 +351,10 @@ export class ApiFootballProvider implements OddsProvider {
     this.budgetDay = key;
     this.requestsToday = 0;
     this.reportedRemaining = null;
+    this.fixtureFetchedDay = null;
+    this.scheduledFixtures = [];
+    this.oddsCache.clear();
+    this.lastOddsCheckByFixture.clear();
   }
 
   private canRequest(): boolean {
