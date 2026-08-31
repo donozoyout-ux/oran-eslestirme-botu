@@ -24,6 +24,8 @@ export interface MonitorStatus {
   lastErrorAt: string | null;
   lastError: string | null;
   lastRun: RunSummary | null;
+  recentQuotesUpdatedAt: string | null;
+  recentMatchesUpdatedAt: string | null;
   recentQuotes: Array<{
     event: string;
     phase: "prematch" | "live";
@@ -75,6 +77,8 @@ export class OddsMonitor {
       lastErrorAt: null,
       lastError: null,
       lastRun: null,
+      recentQuotesUpdatedAt: null,
+      recentMatchesUpdatedAt: null,
       recentQuotes: [],
       recentMatches: [],
       marketAnalysis: { consensus: [], arbitrage: [] },
@@ -252,29 +256,41 @@ export class OddsMonitor {
       };
 
       this.statusValue.lastRun = summary;
-      this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 40).map((quote) => ({
-        event: `${quote.homeTeam} - ${quote.awayTeam}`,
-        phase: quote.phase,
-        market: quote.marketName,
-        selection: quote.selectionName,
-        line: quote.line,
-        bookmaker: quote.bookmakerName,
-        price: quote.price,
-        updatedAt: quote.updatedAt,
-      }));
-      this.statusValue.recentMatches = comparison.matches.slice(0, 20).map((match) => ({
-        event: `${match.quoteA.homeTeam} - ${match.quoteA.awayTeam}`,
-        phase: match.phase,
-        market: match.quoteA.marketName,
-        selection: match.quoteA.selectionName,
-        line: match.quoteA.line,
-        bookmakerA: match.quoteA.bookmakerName,
-        priceA: match.quoteA.price,
-        bookmakerB: match.quoteB.bookmakerName,
-        priceB: match.quoteB.price,
-        differencePercent: Number(match.relativeDifferencePercent.toFixed(2)),
-        detectedAt: match.detectedAt,
-      }));
+
+      // Polling mimarisi geregi scraper/API her dongude oran okumak zorunda degil.
+      // Bos ve saglikli bir dongu, son basarili oran tablosunu silmemeli. Aksi
+      // halde Telegram sinyali geldikten bir poll sonra arayuz tekrar bos gorunur.
+      if (comparison.freshQuotes.length > 0) {
+        this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 40).map((quote) => ({
+          event: `${quote.homeTeam} - ${quote.awayTeam}`,
+          phase: quote.phase,
+          market: quote.marketName,
+          selection: quote.selectionName,
+          line: quote.line,
+          bookmaker: quote.bookmakerName,
+          price: quote.price,
+          updatedAt: quote.updatedAt,
+        }));
+        this.statusValue.recentQuotesUpdatedAt = finishedAt.toISOString();
+      }
+
+      if (comparison.matches.length > 0) {
+        this.statusValue.recentMatches = comparison.matches.slice(0, 20).map((match) => ({
+          event: `${match.quoteA.homeTeam} - ${match.quoteA.awayTeam}`,
+          phase: match.phase,
+          market: match.quoteA.marketName,
+          selection: match.quoteA.selectionName,
+          line: match.quoteA.line,
+          bookmakerA: match.quoteA.bookmakerName,
+          priceA: match.quoteA.price,
+          bookmakerB: match.quoteB.bookmakerName,
+          priceB: match.quoteB.price,
+          differencePercent: Number(match.relativeDifferencePercent.toFixed(2)),
+          detectedAt: match.detectedAt,
+        }));
+        this.statusValue.recentMatchesUpdatedAt = finishedAt.toISOString();
+      }
+
       this.statusValue.lastSuccessAt = finishedAt.toISOString();
       this.statusValue.lastError = null;
       this.statusValue.totals.runs += 1;

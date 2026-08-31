@@ -86,6 +86,20 @@ class MovingProvider implements OddsProvider {
   }
 }
 
+class ScheduledProvider implements OddsProvider {
+  readonly name = "scheduled";
+  private calls = 0;
+  async fetchQuotes(): Promise<OddsQuote[]> {
+    this.calls += 1;
+    if (this.calls > 1) return [];
+    return [
+      baseQuote,
+      { ...baseQuote, bookmakerKey: "b", bookmakerName: "B", price: 2.11 },
+      { ...baseQuote, bookmakerKey: "c", bookmakerName: "C", price: 2.12 },
+    ];
+  }
+}
+
 describe("OddsMonitor", () => {
   it("son 20 dakikada 3 kaynakla dogrulanan yakinligi mac basina bir kez gonderir", async () => {
     vi.useFakeTimers();
@@ -110,6 +124,37 @@ describe("OddsMonitor", () => {
     expect(monitor.getStatus().recentQuotes).toHaveLength(3);
     expect(monitor.getStatus().recentMatches.length).toBeGreaterThan(0);
     expect(monitor.getStatus().dailySheet.oddsSnapshotCount).toBe(6);
+  });
+
+  it("bos planli poll son basarili oran ve eslesme tablosunu silmez", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    const monitor = new OddsMonitor(
+      new ScheduledProvider(),
+      new CollectingNotifier(),
+      new MemoryAlertStore(600),
+      monitorOptions(),
+      dailySheet(),
+    );
+
+    const first = await monitor.runOnce();
+    const afterFirst = monitor.getStatus();
+    expect(first.quotesFresh).toBe(3);
+    expect(afterFirst.recentQuotes).toHaveLength(3);
+    expect(afterFirst.recentMatches.length).toBeGreaterThan(0);
+    expect(afterFirst.recentQuotesUpdatedAt).not.toBeNull();
+    expect(afterFirst.recentMatchesUpdatedAt).not.toBeNull();
+
+    vi.advanceTimersByTime(60_000);
+    const second = await monitor.runOnce();
+    const afterEmptyPoll = monitor.getStatus();
+
+    expect(second.quotesFresh).toBe(0);
+    expect(second.matchesFound).toBe(0);
+    expect(afterEmptyPoll.recentQuotes).toEqual(afterFirst.recentQuotes);
+    expect(afterEmptyPoll.recentMatches).toEqual(afterFirst.recentMatches);
+    expect(afterEmptyPoll.recentQuotesUpdatedAt).toBe(afterFirst.recentQuotesUpdatedAt);
+    expect(afterEmptyPoll.recentMatchesUpdatedAt).toBe(afterFirst.recentMatchesUpdatedAt);
   });
 
   it("yuzde 8 oran hareketini Telegram bildiricisine bir kez yollar", async () => {
