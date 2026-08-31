@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/", "destination": "/api/dashboard" },
+    { "source": "/health", "destination": "/api/proxy?path=health" },
+    { "source": "/status", "destination": "/api/proxy?path=status" },
+    { "source": "/daily-matches.csv", "destination": "/api/proxy?path=daily-matches.csv" },
+    { "source": "/odds-history.csv", "destination": "/api/proxy?path=odds-history.csv" }
+  ]
+}
