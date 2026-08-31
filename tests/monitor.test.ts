@@ -21,6 +21,7 @@ function dailySheet(): JsonDailyMatchSheet {
   temporaryDirectories.push(directory);
   return new JsonDailyMatchSheet(path.join(directory, "daily.json"), 8);
 }
+
 const baseQuote: OddsQuote = {
   provider: "test",
   bookmakerKey: "a",
@@ -30,7 +31,7 @@ const baseQuote: OddsQuote = {
   leagueName: "Test",
   homeTeam: "A Takimi",
   awayTeam: "B Takimi",
-  commenceTime: new Date(FIXED_NOW.getTime() + 3_600_000).toISOString(),
+  commenceTime: new Date(FIXED_NOW.getTime() + 15 * 60_000).toISOString(),
   phase: "prematch",
   marketKey: "match_winner_3way",
   marketName: "Mac Sonucu",
@@ -42,10 +43,25 @@ const baseQuote: OddsQuote = {
   updatedAt: timestamp,
 };
 
+function monitorOptions() {
+  return {
+    tolerancePercent: 2,
+    maxQuoteAgeSeconds: 300,
+    pollIntervalSeconds: 60,
+    prematchAlertWindowMinutes: 20,
+    prematchAlertMinSources: 3,
+    prematchAlertMinConfidence: 60,
+  };
+}
+
 class StaticProvider implements OddsProvider {
   readonly name = "static";
   async fetchQuotes(): Promise<OddsQuote[]> {
-    return [baseQuote, { ...baseQuote, bookmakerKey: "b", bookmakerName: "B", price: 2.12 }];
+    return [
+      baseQuote,
+      { ...baseQuote, bookmakerKey: "b", bookmakerName: "B", price: 2.11 },
+      { ...baseQuote, bookmakerKey: "c", bookmakerName: "C", price: 2.12 },
+    ];
   }
 }
 
@@ -71,15 +87,17 @@ class MovingProvider implements OddsProvider {
 }
 
 describe("OddsMonitor", () => {
-  it("ayni bildirimi cooldown icinde ikinci kez gondermez", async () => {
+  it("son 20 dakikada 3 kaynakla dogrulanan yakinligi mac basina bir kez gonderir", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_NOW);
     const notifier = new CollectingNotifier();
-    const monitor = new OddsMonitor(new StaticProvider(), notifier, new MemoryAlertStore(600), {
-      tolerancePercent: 2,
-      maxQuoteAgeSeconds: 300,
-      pollIntervalSeconds: 60,
-    }, dailySheet());
+    const monitor = new OddsMonitor(
+      new StaticProvider(),
+      notifier,
+      new MemoryAlertStore(600),
+      monitorOptions(),
+      dailySheet(),
+    );
 
     const first = await monitor.runOnce();
     const second = await monitor.runOnce();
@@ -88,20 +106,23 @@ describe("OddsMonitor", () => {
     expect(second.alertsSent).toBe(0);
     expect(second.alertsSuppressed).toBe(1);
     expect(notifier.sent).toHaveLength(1);
-    expect(monitor.getStatus().recentQuotes).toHaveLength(2);
-    expect(monitor.getStatus().recentMatches).toHaveLength(1);
-    expect(monitor.getStatus().dailySheet.oddsSnapshotCount).toBe(4);
+    expect(notifier.sent[0]?.id.startsWith("prematch-close:")).toBe(true);
+    expect(monitor.getStatus().recentQuotes).toHaveLength(3);
+    expect(monitor.getStatus().recentMatches.length).toBeGreaterThan(0);
+    expect(monitor.getStatus().dailySheet.oddsSnapshotCount).toBe(6);
   });
 
   it("yuzde 8 oran hareketini Telegram bildiricisine bir kez yollar", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_NOW);
     const notifier = new CollectingNotifier();
-    const monitor = new OddsMonitor(new MovingProvider(), notifier, new MemoryAlertStore(600), {
-      tolerancePercent: 2,
-      maxQuoteAgeSeconds: 300,
-      pollIntervalSeconds: 60,
-    }, dailySheet());
+    const monitor = new OddsMonitor(
+      new MovingProvider(),
+      notifier,
+      new MemoryAlertStore(600),
+      monitorOptions(),
+      dailySheet(),
+    );
 
     const first = await monitor.runOnce();
     const second = await monitor.runOnce();

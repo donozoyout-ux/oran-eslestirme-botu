@@ -32,6 +32,9 @@ try {
     tolerancePercent: config.tolerancePercent,
     maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
     pollIntervalSeconds: config.pollIntervalSeconds,
+    prematchAlertWindowMinutes: config.prematchAlertWindowMinutes,
+    prematchAlertMinSources: config.prematchAlertMinSources,
+    prematchAlertMinConfidence: config.prematchAlertMinConfidence,
   }, dailySheet);
   const server = createServer(monitor, config.adminToken);
 
@@ -42,6 +45,9 @@ try {
       notifier: notifier.name,
       tolerancePercent: config.tolerancePercent,
       pollIntervalSeconds: config.pollIntervalSeconds,
+      prematchAlertWindowMinutes: config.prematchAlertWindowMinutes,
+      prematchAlertMinSources: config.prematchAlertMinSources,
+      prematchAlertMinConfidence: config.prematchAlertMinConfidence,
       surpriseOddsThreshold: config.surpriseOddsThreshold,
       googleSheetsEnabled: Boolean(googleSheetsMirror),
       googleSheetsSyncMinutes: config.googleSheetsSyncMinutes,

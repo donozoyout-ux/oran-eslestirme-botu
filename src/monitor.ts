@@ -4,11 +4,15 @@ import { rankCouponCandidates, type CouponCandidate } from "./coupon-engine.js";
 import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { errorMessage, logger } from "./logger.js";
 import { analyzeOddsMarket, type ArbitrageOpportunity, type SelectionConsensus } from "./market-analysis-engine.js";
+import { selectPrematchCloseAlerts } from "./prematch-alert-gate.js";
 
 export interface MonitorOptions {
   tolerancePercent: number;
   maxQuoteAgeSeconds: number;
   pollIntervalSeconds: number;
+  prematchAlertWindowMinutes: number;
+  prematchAlertMinSources: number;
+  prematchAlertMinConfidence: number;
 }
 
 export interface MonitorStatus {
@@ -139,6 +143,17 @@ export class OddsMonitor {
         comparisonTime,
       );
       const marketAnalysis = analyzeOddsMarket(comparison.freshQuotes, {}, comparisonTime);
+      const prematchCloseAlerts = selectPrematchCloseAlerts(
+        comparison.matches,
+        marketAnalysis.consensus,
+        comparisonTime,
+        {
+          windowMinutes: this.options.prematchAlertWindowMinutes,
+          minSources: this.options.prematchAlertMinSources,
+          minConfidenceScore: this.options.prematchAlertMinConfidence,
+          maxDispersionPercent: this.options.tolerancePercent,
+        },
+      );
 
       this.statusValue.marketAnalysis = {
         consensus: marketAnalysis.consensus.slice(0, 50),
@@ -203,7 +218,9 @@ export class OddsMonitor {
         }
       }
 
-      for (const match of comparison.matches) {
+      // Yakin oran alarmi artik sadece mac baslamadan onceki son pencerede,
+      // en az 3 kaynakla dogrulanan ve yuksek guvenli tek aday olarak gider.
+      for (const match of prematchCloseAlerts) {
         const now = new Date();
         if (!this.alertStore.shouldSend(match.id, now)) {
           alertsSuppressed += 1;
@@ -262,12 +279,16 @@ export class OddsMonitor {
       this.statusValue.lastError = null;
       this.statusValue.totals.runs += 1;
       this.statusValue.totals.alertsSent += alertsSent;
-      logger.info("Oran taramasi tamamlandi.", { ...summary });
+      logger.info("Oran taramasi tamamlandi.", {
+        ...summary,
+        prematchCloseAlertsEligible: prematchCloseAlerts.length,
+        prematchAlertWindowMinutes: this.options.prematchAlertWindowMinutes,
+      });
       return summary;
     } catch (error) {
       const message = errorMessage(error);
 
-      // Provider tarafinda tamamen hata olsa bile Sheet aynasini guncelle. Böylece
+      // Provider tarafinda tamamen hata olsa bile Sheet aynasini guncelle. Boylece
       // bitmis/stale maclar bir veri kaynagi timeout oldu diye tabloda takili kalmaz.
       try {
         const cleanupTime = new Date();
