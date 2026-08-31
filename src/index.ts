@@ -1,6 +1,7 @@
 import { JsonAlertStore } from "./alert-store.js";
 import { loadConfig } from "./config.js";
 import { JsonDailyMatchSheet } from "./daily-match-sheet.js";
+import { GoogleResultsMirror } from "./google-results-mirror.js";
 import { GoogleSheetsMirror } from "./google-sheets-mirror.js";
 import { enableRawOddsGoogleSheet } from "./google-sheets-raw-odds.js";
 import { enableSafeGoogleSheetRefresh } from "./google-sheets-safe-refresh.js";
@@ -8,24 +9,43 @@ import { errorMessage, logger } from "./logger.js";
 import { OddsMonitor } from "./monitor.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
 import { createProvider } from "./providers/index.js";
+import { ResultTrackingProvider } from "./providers/result-tracking-provider.js";
+import { ResultsTracker } from "./results-tracker.js";
 import { createServer } from "./server.js";
 import { sendTelegramStartupMessage } from "./telegram-health.js";
 
 try {
   const config = loadConfig();
-  const provider = createProvider(config);
+  const baseProvider = createProvider(config);
   const notifier = config.dryRun
     ? new ConsoleNotifier()
     : new TelegramNotifier(config.telegramBotToken!, config.telegramChatId!, config.surpriseOddsThreshold);
   const alertStore = new JsonAlertStore(config.stateFile, config.alertCooldownSeconds);
-  const googleSheetsMirror =
-    config.googleSheetsSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey
-      ? enableRawOddsGoogleSheet(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
-          spreadsheetId: config.googleSheetsSpreadsheetId,
-          serviceAccountEmail: config.googleServiceAccountEmail,
-          privateKey: config.googlePrivateKey,
-        })))
-      : undefined;
+  const googleSheetsEnabled = Boolean(
+    config.googleSheetsSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey,
+  );
+  const googleSheetsMirror = googleSheetsEnabled
+    ? enableRawOddsGoogleSheet(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
+        spreadsheetId: config.googleSheetsSpreadsheetId!,
+        serviceAccountEmail: config.googleServiceAccountEmail!,
+        privateKey: config.googlePrivateKey!,
+      })))
+    : undefined;
+  const googleResultsMirror = googleSheetsEnabled
+    ? new GoogleResultsMirror({
+        spreadsheetId: config.googleSheetsSpreadsheetId!,
+        serviceAccountEmail: config.googleServiceAccountEmail!,
+        privateKey: config.googlePrivateKey!,
+      })
+    : undefined;
+  const resultsFile = config.dailySheetFile.endsWith(".json")
+    ? config.dailySheetFile.replace(/\.json$/i, ".results.json")
+    : `${config.dailySheetFile}.results.json`;
+  const resultsTracker = new ResultsTracker(resultsFile, {
+    mirror: googleResultsMirror,
+    mirrorSyncMinutes: config.googleSheetsSyncMinutes,
+  });
+  const provider = new ResultTrackingProvider(baseProvider, resultsTracker);
   const dailySheet = new JsonDailyMatchSheet(config.dailySheetFile, config.oddsMovementThresholdPercent, {
     mirror: googleSheetsMirror,
     mirrorSyncMinutes: config.googleSheetsSyncMinutes,
@@ -51,8 +71,9 @@ try {
       prematchAlertMinSources: config.prematchAlertMinSources,
       prematchAlertMinConfidence: config.prematchAlertMinConfidence,
       surpriseOddsThreshold: config.surpriseOddsThreshold,
-      googleSheetsEnabled: Boolean(googleSheetsMirror),
+      googleSheetsEnabled,
       googleSheetsSyncMinutes: config.googleSheetsSyncMinutes,
+      resultsTrackingEnabled: true,
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });

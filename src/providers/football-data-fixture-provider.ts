@@ -1,4 +1,4 @@
-import type { MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
+import type { FixtureResultStatus, MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
 
 interface FootballDataMatch {
   id?: number;
@@ -7,6 +7,7 @@ interface FootballDataMatch {
   competition?: { name?: string };
   homeTeam?: { name?: string };
   awayTeam?: { name?: string };
+  score?: { fullTime?: { home?: number | null; away?: number | null } };
 }
 
 interface FootballDataResponse {
@@ -23,7 +24,7 @@ export interface FootballDataFixtureProviderOptions {
 }
 
 const LIVE_STATUSES = new Set(["LIVE", "IN_PLAY", "PAUSED"]);
-const CLOSED_STATUSES = new Set(["FINISHED", "CANCELLED", "POSTPONED", "SUSPENDED"]);
+const CANCELLED_STATUSES = new Set(["CANCELLED", "POSTPONED", "SUSPENDED"]);
 
 function dayKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -34,40 +35,64 @@ function dayKey(date: Date): string {
   }).format(date);
 }
 
+function istanbulHour(date: Date): number {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Istanbul",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+  return Number(hour);
+}
+
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setUTCDate(result.getUTCDate() + days);
   return result;
 }
 
+function resultStatus(status: string): FixtureResultStatus {
+  if (status === "FINISHED") return "finished";
+  if (CANCELLED_STATUSES.has(status)) return "cancelled";
+  if (LIVE_STATUSES.has(status)) return "live";
+  return "scheduled";
+}
+
 export class FootballDataFixtureProvider implements OddsProvider {
   readonly name = "football_data";
   private readonly baseUrl: string;
   private readonly requestTimeoutMs: number;
+  private readonly refreshMinutes: number;
   private lastFixtures: MatchFixture[] = [];
-  private fetchedDay: string | null = null;
+  private lastFetchedAt: number | null = null;
   private budgetDay = dayKey(new Date());
   private requestsToday = 0;
 
   constructor(private readonly options: FootballDataFixtureProviderOptions) {
     this.baseUrl = options.baseUrl ?? "https://api.football-data.org/v4";
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
+    // Bu kaynak artik sadece fikstur + skor dogrulamasi yapar. Saatte birden
+    // sik cagrilmayarak ucretsiz kotayi gun sonuna kadar koruruz.
+    this.refreshMinutes = Math.max(60, options.cacheMinutes);
   }
 
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const now = new Date();
     this.resetBudgetIfNeeded(now);
-    const today = dayKey(now);
-    if (this.fetchedDay === today) return [];
+    if (this.lastFetchedAt !== null && now.getTime() - this.lastFetchedAt < this.refreshMinutes * 60_000) return [];
     if (this.requestsToday >= this.options.dailyRequestBudget) return [];
 
+    const today = dayKey(now);
+    // Gece 00:00-03:59 arasinda bir onceki gunun gec biten maclarini da
+    // getiririz; boylece Sonuclar sekmesi gece yarisi sonrasi tamamlanabilir.
+    const dateFrom = istanbulHour(now) < 4 ? dayKey(addDays(now, -1)) : today;
     const query = new URLSearchParams({
-      dateFrom: today,
+      dateFrom,
       dateTo: dayKey(addDays(now, 1)),
     });
     if (this.options.competitionCodes.length > 0) query.set("competitions", this.options.competitionCodes.join(","));
 
     this.requestsToday += 1;
+    this.lastFetchedAt = now.getTime();
     const timeout = AbortSignal.timeout(this.requestTimeoutMs);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     const response = await fetch(`${this.baseUrl}/matches?${query.toString()}`, {
@@ -84,7 +109,10 @@ export class FootballDataFixtureProvider implements OddsProvider {
       const homeTeam = match.homeTeam?.name;
       const awayTeam = match.awayTeam?.name;
       const status = match.status?.toUpperCase() ?? "";
-      if (!id || !commenceTime || !homeTeam || !awayTeam || CLOSED_STATUSES.has(status)) continue;
+      if (!id || !commenceTime || !homeTeam || !awayTeam) continue;
+      const resolvedStatus = resultStatus(status);
+      const homeScore = match.score?.fullTime?.home;
+      const awayScore = match.score?.fullTime?.away;
       fixtures.push({
         provider: this.name,
         sourceEventId: String(id),
@@ -92,11 +120,15 @@ export class FootballDataFixtureProvider implements OddsProvider {
         homeTeam,
         awayTeam,
         commenceTime,
-        phase: LIVE_STATUSES.has(status) ? "live" : "prematch",
+        // Biten/iptal maclari mevcut aktif-mac Sheet filtresine sokmamak icin
+        // prematch fazinda tutuyoruz; asil sonuc durumu resultStatus alanindadir.
+        phase: resolvedStatus === "live" ? "live" : "prematch",
+        resultStatus: resolvedStatus,
+        ...(typeof homeScore === "number" ? { homeScore } : {}),
+        ...(typeof awayScore === "number" ? { awayScore } : {}),
       });
     }
     this.lastFixtures = fixtures;
-    this.fetchedDay = today;
     return [];
   }
 
@@ -109,7 +141,7 @@ export class FootballDataFixtureProvider implements OddsProvider {
     if (key === this.budgetDay) return;
     this.budgetDay = key;
     this.requestsToday = 0;
-    this.fetchedDay = null;
+    this.lastFetchedAt = null;
     this.lastFixtures = [];
   }
 }

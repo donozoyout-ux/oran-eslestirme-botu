@@ -37,6 +37,8 @@ export interface OddsQuote {
   sourceUrl?: string;
 }
 
+export type FixtureResultStatus = "scheduled" | "live" | "finished" | "cancelled";
+
 export interface MatchFixture {
   provider: string;
   sourceEventId: string;
@@ -48,6 +50,9 @@ export interface MatchFixture {
   sourceUrl?: string;
   lastOddsCheckAt?: string;
   nextOddsCheckAt?: string;
+  resultStatus?: FixtureResultStatus;
+  homeScore?: number;
+  awayScore?: number;
 }
 
 export interface OddsMatch {
