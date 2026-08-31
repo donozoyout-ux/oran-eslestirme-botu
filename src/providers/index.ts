@@ -7,6 +7,7 @@ import { CompositeOddsProvider } from "./composite-provider.js";
 import { ApiFootballProvider } from "./api-football-provider.js";
 import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js";
 import { ResilientOddsProvider } from "./resilient-provider.js";
+import { TieredOddsProvider } from "./tiered-provider.js";
 
 function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   if (!config.oddsApiKey) throw new Error("ODDS_API_KEY eksik.");
@@ -19,8 +20,8 @@ function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   });
 }
 
-function betExplorerProvider(config: AppConfig): OddsProvider {
-  const scraper = new BetExplorerScraperProvider({
+function betExplorerScraper(config: AppConfig): BetExplorerScraperProvider {
+  return new BetExplorerScraperProvider({
     bookmakerKeys: config.bookmakerKeys,
     maxMatches: config.scraperMaxMatches,
     maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
@@ -35,42 +36,63 @@ function betExplorerProvider(config: AppConfig): OddsProvider {
     livePollMinutes: config.livePollMinutes,
     executablePath: config.chromiumExecutablePath,
   });
-  return new ResilientOddsProvider(scraper);
+}
+
+function apiFootballProvider(config: AppConfig): ApiFootballProvider | null {
+  if (!config.apiFootballKey) return null;
+  return new ApiFootballProvider({
+    apiKey: config.apiFootballKey,
+    bookmakerKeys: config.bookmakerKeys,
+    maxFixtures: config.apiFootballMaxFixtures,
+    fixtureCacheMinutes: config.apiFootballFixtureCacheMinutes,
+    prematchCacheMinutes: config.apiFootballPrematchCacheMinutes,
+    liveCacheMinutes: config.apiFootballLiveCacheMinutes,
+    dailyRequestBudget: config.apiFootballDailyRequestBudget,
+    leagueScope: config.leagueScope,
+    maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
+  });
+}
+
+function footballDataProvider(config: AppConfig): FootballDataFixtureProvider | null {
+  if (!config.footballDataToken) return null;
+  return new FootballDataFixtureProvider({
+    apiKey: config.footballDataToken,
+    competitionCodes: config.footballDataCompetitionCodes,
+    cacheMinutes: config.footballDataCacheMinutes,
+    dailyRequestBudget: config.footballDataDailyRequestBudget,
+  });
 }
 
 export function createProvider(config: AppConfig): OddsProvider {
   if (config.provider === "mock") return new MockOddsProvider();
 
-  const providers: OddsProvider[] = [];
-  if (config.provider === "betexplorer_scraper") providers.push(betExplorerProvider(config));
-  if (config.provider === "the_odds_api") providers.push(theOddsApiProvider(config));
-
-  // BetExplorer ana kaynakken eski davranış korunur: ODDS_API_KEY varsa The Odds API yedek kaynak olarak eklenir.
-  if (config.provider === "betexplorer_scraper" && config.oddsApiKey) providers.push(theOddsApiProvider(config));
-
-  if (config.apiFootballKey) {
-    providers.push(new ApiFootballProvider({
-      apiKey: config.apiFootballKey,
-      bookmakerKeys: config.bookmakerKeys,
-      maxFixtures: config.apiFootballMaxFixtures,
-      fixtureCacheMinutes: config.apiFootballFixtureCacheMinutes,
-      prematchCacheMinutes: config.apiFootballPrematchCacheMinutes,
-      liveCacheMinutes: config.apiFootballLiveCacheMinutes,
-      dailyRequestBudget: config.apiFootballDailyRequestBudget,
-      leagueScope: config.leagueScope,
-      maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
-    }));
+  // Kullanici ODDS_PROVIDER=the_odds_api diye acikca sectiyse eski davranis
+  // korunur: bu durumda The Odds API ana kaynaktir ve her tur kullanilabilir.
+  if (config.provider === "the_odds_api") {
+    const providers: OddsProvider[] = [theOddsApiProvider(config)];
+    const apiFootball = apiFootballProvider(config);
+    const footballData = footballDataProvider(config);
+    if (apiFootball) providers.push(apiFootball);
+    if (footballData) providers.push(footballData);
+    return providers.length === 1 ? providers[0]! : new CompositeOddsProvider(providers);
   }
 
-  if (config.footballDataToken) {
-    providers.push(new FootballDataFixtureProvider({
-      apiKey: config.footballDataToken,
-      competitionCodes: config.footballDataCompetitionCodes,
-      cacheMinutes: config.footballDataCacheMinutes,
-      dailyRequestBudget: config.footballDataDailyRequestBudget,
-    }));
-  }
+  // Normal production modu: BetExplorer + API-Football ana oran kaynaklari.
+  // football-data sadece fikstur kaynagidir. ODDS_API_KEY mevcut olsa bile
+  // The Odds API normal dongude cagrilmaz; sadece tum ana oran kaynaklari
+  // gercekten hata verirse son-care fallback olarak kullanilir.
+  const primaryProviders: OddsProvider[] = [betExplorerScraper(config)];
+  const apiFootball = apiFootballProvider(config);
+  if (apiFootball) primaryProviders.push(apiFootball);
 
-  if (providers.length === 0) throw new Error("Aktif veri kaynağı bulunamadı.");
-  return providers.length === 1 ? providers[0]! : new CompositeOddsProvider(providers);
+  const fixtureProviders: OddsProvider[] = [];
+  const footballData = footballDataProvider(config);
+  if (footballData) fixtureProviders.push(footballData);
+
+  const fallbackProvider = config.oddsApiKey ? theOddsApiProvider(config) : undefined;
+  const tiered = new TieredOddsProvider(primaryProviders, fixtureProviders, fallbackProvider);
+
+  // Fallback de hata verirse veya fallback yoksa monitor tamamen cokmesin;
+  // son bilinen fikstur katalogu ve Sheet temizleme dongusu devam etsin.
+  return new ResilientOddsProvider(tiered);
 }
