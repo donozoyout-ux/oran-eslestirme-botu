@@ -1,6 +1,7 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { dashboardHtml } from "./dashboard.js";
 import type { OddsMonitor } from "./monitor.js";
+import { getProviderDiagnostics } from "./provider-diagnostics.js";
 
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
   response.writeHead(status, {
@@ -61,7 +62,10 @@ export function createServer(monitor: OddsMonitor, adminToken?: string): http.Se
     }
 
     if (method === "GET" && url.pathname === "/status") {
-      sendJson(response, 200, monitor.getStatus());
+      sendJson(response, 200, {
+        ...monitor.getStatus(),
+        providerDiagnostics: getProviderDiagnostics(),
+      });
       return;
     }
 
