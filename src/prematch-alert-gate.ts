@@ -7,6 +7,7 @@ export interface PrematchAlertGateOptions {
   minSources: number;
   minConfidenceScore: number;
   maxDispersionPercent: number;
+  minValuePercent?: number;
 }
 
 function normalizedLine(line: number | null): string {
@@ -32,10 +33,23 @@ function stableEventAlertId(match: OddsMatch): string {
   return `prematch-close:${createHash("sha256").update(match.eventKey).digest("hex").slice(0, 20)}`;
 }
 
+function rowFairOdds(row: SelectionConsensus): number {
+  if (!Number.isFinite(row.fairProbabilityPercent) || row.fairProbabilityPercent <= 0) return 0;
+  return 100 / row.fairProbabilityPercent;
+}
+
+function matchValuePercent(match: OddsMatch, row: SelectionConsensus): number {
+  const fair = rowFairOdds(row);
+  if (fair <= 1) return Number.NEGATIVE_INFINITY;
+  const bestPrice = Math.max(match.quoteA.price, match.quoteB.price);
+  return ((bestPrice / fair) - 1) * 100;
+}
+
 /**
  * Telegram'a her yakin oran ciftini yollamak yerine sadece mac baslamadan onceki
- * son pencerede, en az birkac bagimsiz bookmaker tarafindan dogrulanan sikisik
- * piyasalari secer. Her gercek mac icin en fazla bir yakinlik alarmi doner.
+ * son pencerede, coklu kaynakla dogrulanan ve adil fiyata gore POZITIF VALUE
+ * tasiyan piyasalari secer. Dusuk oran veya bookmakerlarin birbirine yakin olmasi
+ * tek basina bildirim sebebi degildir.
  */
 export function selectPrematchCloseAlerts(
   matches: OddsMatch[],
@@ -44,7 +58,8 @@ export function selectPrematchCloseAlerts(
   options: PrematchAlertGateOptions,
 ): OddsMatch[] {
   const consensusByKey = new Map(consensus.map((row) => [consensusKey(row), row]));
-  const bestByEvent = new Map<string, { match: OddsMatch; confidence: number; dispersion: number }>();
+  const bestByEvent = new Map<string, { match: OddsMatch; confidence: number; dispersion: number; value: number }>();
+  const minValuePercent = options.minValuePercent ?? 2;
 
   for (const match of matches) {
     if (match.phase !== "prematch") continue;
@@ -57,25 +72,27 @@ export function selectPrematchCloseAlerts(
     if (row.confidenceScore < options.minConfidenceScore) continue;
     if (row.dispersionPercent > options.maxDispersionPercent) continue;
 
+    const value = matchValuePercent(match, row);
+    if (!Number.isFinite(value) || value < minValuePercent) continue;
+
     const candidate = {
       match: { ...match, id: stableEventAlertId(match) },
       confidence: row.confidenceScore,
       dispersion: row.dispersionPercent,
+      value,
     };
     const existing = bestByEvent.get(match.eventKey);
     if (
       !existing ||
-      candidate.confidence > existing.confidence ||
-      (candidate.confidence === existing.confidence && candidate.dispersion < existing.dispersion) ||
-      (candidate.confidence === existing.confidence &&
-        candidate.dispersion === existing.dispersion &&
-        candidate.match.relativeDifferencePercent < existing.match.relativeDifferencePercent)
+      candidate.value > existing.value ||
+      (candidate.value === existing.value && candidate.confidence > existing.confidence) ||
+      (candidate.value === existing.value && candidate.confidence === existing.confidence && candidate.dispersion < existing.dispersion)
     ) {
       bestByEvent.set(match.eventKey, candidate);
     }
   }
 
   return [...bestByEvent.values()]
-    .sort((a, b) => b.confidence - a.confidence || a.dispersion - b.dispersion)
+    .sort((a, b) => b.value - a.value || b.confidence - a.confidence || a.dispersion - b.dispersion)
     .map((candidate) => candidate.match);
 }
