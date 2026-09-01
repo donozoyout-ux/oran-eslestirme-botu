@@ -112,7 +112,7 @@ export function loadConfig(): AppConfig {
     apiFootballMaxFixtures: numberValue("API_FOOTBALL_MAX_FIXTURES", 2, { min: 1, max: 10 }),
     apiFootballFixtureCacheMinutes: numberValue("API_FOOTBALL_FIXTURE_CACHE_MINUTES", 30, { min: 5, max: 360 }),
     apiFootballPrematchCacheMinutes: numberValue("API_FOOTBALL_PREMATCH_CACHE_MINUTES", 120, { min: 15, max: 1_440 }),
-    apiFootballLiveCacheMinutes: numberValue("API_FOOTBALL_LIVE_CACHE_MINUTES", 10, { min: 2, max: 120 }),
+    apiFootballLiveCacheMinutes: numberValue("API_FOOTBALL_LIVE_CACHE_MINUTES", 3, { min: 2, max: 120 }),
     apiFootballDailyRequestBudget: numberValue("API_FOOTBALL_DAILY_REQUEST_BUDGET", 80, { min: 1, max: 100 }),
     footballDataCompetitionCodes: csv("FOOTBALL_DATA_COMPETITIONS", "PL,PD,BL1,SA,FL1,CL"),
     footballDataCacheMinutes: numberValue("FOOTBALL_DATA_CACHE_MINUTES", 30, { min: 5, max: 1_440 }),
