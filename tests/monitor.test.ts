@@ -101,7 +101,7 @@ class ScheduledProvider implements OddsProvider {
 }
 
 describe("OddsMonitor", () => {
-  it("son 20 dakikada 3 kaynakla dogrulanan yakinligi mac basina bir kez gonderir", async () => {
+  it("3 kaynakta yakin oran olsa bile pozitif value yoksa Telegram'a gondermez", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_NOW);
     const notifier = new CollectingNotifier();
@@ -116,11 +116,9 @@ describe("OddsMonitor", () => {
     const first = await monitor.runOnce();
     const second = await monitor.runOnce();
 
-    expect(first.alertsSent).toBe(1);
+    expect(first.alertsSent).toBe(0);
     expect(second.alertsSent).toBe(0);
-    expect(second.alertsSuppressed).toBe(1);
-    expect(notifier.sent).toHaveLength(1);
-    expect(notifier.sent[0]?.id.startsWith("prematch-close:")).toBe(true);
+    expect(notifier.sent).toHaveLength(0);
     expect(monitor.getStatus().recentQuotes).toHaveLength(3);
     expect(monitor.getStatus().recentMatches.length).toBeGreaterThan(0);
     expect(monitor.getStatus().dailySheet.oddsSnapshotCount).toBe(6);
@@ -157,7 +155,7 @@ describe("OddsMonitor", () => {
     expect(afterEmptyPoll.recentMatchesUpdatedAt).toBe(afterFirst.recentMatchesUpdatedAt);
   });
 
-  it("yuzde 8 oran hareketini Telegram bildiricisine bir kez yollar", async () => {
+  it("oran dususunu tek basina Telegram tahmini saymaz", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_NOW);
     const notifier = new CollectingNotifier();
@@ -174,9 +172,9 @@ describe("OddsMonitor", () => {
     const third = await monitor.runOnce();
 
     expect(first.movementAlertsSent).toBe(0);
-    expect(second.movementAlertsSent).toBe(1);
+    expect(second.movementAlertsSent).toBe(0);
     expect(third.movementAlertsSent).toBe(0);
-    expect(notifier.signals).toHaveLength(1);
-    expect(notifier.signals[0]).toMatchObject({ type: "odds_drop", openingPrice: 2.6, currentPrice: 2.34 });
+    expect(second.alertsSuppressed).toBeGreaterThanOrEqual(1);
+    expect(notifier.signals).toHaveLength(0);
   });
 });
