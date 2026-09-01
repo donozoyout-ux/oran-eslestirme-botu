@@ -4,7 +4,7 @@ import { JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { installGoogleOauthGrantTypeFix } from "./google-oauth-compat.js";
 import { enableGoogleResultsArchive } from "./google-results-archive.js";
 import { GoogleResultsMirror } from "./google-results-mirror.js";
-import { enableGoogleSheetCandidateFix } from "./google-sheets-candidate-fix.js";
+import { enableGoogleSheetCandidateFixV2 } from "./google-sheets-candidate-fix-v2.js";
 import { GoogleSheetsMirror } from "./google-sheets-mirror.js";
 import { enableGoogleSheetLayoutFix } from "./google-sheets-layout-fix.js";
 import { enableRawOddsGoogleSheet } from "./google-sheets-raw-odds.js";
@@ -36,7 +36,7 @@ try {
     config.googleSheetsSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey,
   );
   const googleSheetsMirror = googleSheetsEnabled
-    ? enableGoogleSheetCandidateFix(enableRawOddsGoogleSheet(enableGoogleSheetVisualTheme(enableGoogleSheetLayoutFix(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
+    ? enableGoogleSheetCandidateFixV2(enableRawOddsGoogleSheet(enableGoogleSheetVisualTheme(enableGoogleSheetLayoutFix(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
         spreadsheetId: config.googleSheetsSpreadsheetId!,
         serviceAccountEmail: config.googleServiceAccountEmail!,
         privateKey: config.googlePrivateKey!,
