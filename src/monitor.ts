@@ -5,6 +5,7 @@ import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-shee
 import { errorMessage, logger } from "./logger.js";
 import { analyzeOddsMarket, type ArbitrageOpportunity, type SelectionConsensus } from "./market-analysis-engine.js";
 import { selectPrematchCloseAlerts } from "./prematch-alert-gate.js";
+import { selectSmartAnalysisAlerts } from "./smart-alert-gate.js";
 
 export interface MonitorOptions {
   tolerancePercent: number;
@@ -156,6 +157,7 @@ export class OddsMonitor {
           minSources: this.options.prematchAlertMinSources,
           minConfidenceScore: this.options.prematchAlertMinConfidence,
           maxDispersionPercent: this.options.tolerancePercent,
+          minValuePercent: 2,
         },
       );
 
@@ -180,7 +182,13 @@ export class OddsMonitor {
         this.statusValue.dailySheet = this.dailySheet.getSnapshot();
 
         if (this.notifier.sendAnalysisSignal) {
-          for (const signal of sheetResult.pendingMovementSignals) {
+          const smartMovementSignals = selectSmartAnalysisAlerts(
+            sheetResult.pendingMovementSignals,
+            marketAnalysis.consensus,
+          );
+          alertsSuppressed += sheetResult.pendingMovementSignals.length - smartMovementSignals.length;
+
+          for (const signal of smartMovementSignals) {
             try {
               await this.notifier.sendAnalysisSignal(signal);
               await this.dailySheet.markSignalNotified(signal.id, new Date());
@@ -188,7 +196,7 @@ export class OddsMonitor {
               movementAlertsSent += 1;
             } catch (error) {
               this.statusValue.totals.errors += 1;
-              logger.error("Oran hareketi bildirimi gonderilemedi.", {
+              logger.error("Akilli oran hareketi bildirimi gonderilemedi.", {
                 signalId: signal.id,
                 error: errorMessage(error),
               });
@@ -201,7 +209,13 @@ export class OddsMonitor {
       }
 
       if (this.notifier.sendAnalysisSignal) {
-        for (const signal of marketAnalysis.alertSignals) {
+        const smartMarketSignals = selectSmartAnalysisAlerts(
+          marketAnalysis.alertSignals,
+          marketAnalysis.consensus,
+        );
+        alertsSuppressed += marketAnalysis.alertSignals.length - smartMarketSignals.length;
+
+        for (const signal of smartMarketSignals) {
           const now = new Date();
           if (!this.alertStore.shouldSend(signal.id, now)) {
             alertsSuppressed += 1;
@@ -214,7 +228,7 @@ export class OddsMonitor {
             marketAnalysisAlertsSent += 1;
           } catch (error) {
             this.statusValue.totals.errors += 1;
-            logger.error("Piyasa analizi bildirimi gonderilemedi.", {
+            logger.error("Akilli piyasa analizi bildirimi gonderilemedi.", {
               signalId: signal.id,
               error: errorMessage(error),
             });
@@ -222,8 +236,8 @@ export class OddsMonitor {
         }
       }
 
-      // Yakin oran alarmi artik sadece mac baslamadan onceki son pencerede,
-      // en az 3 kaynakla dogrulanan ve yuksek guvenli tek aday olarak gider.
+      // Yakin oran alarmi artik yalnizca yakinlik degil, adil orana gore pozitif
+      // value de tasiyorsa gider. Dusuk oran tek basina bildirim sebebi degildir.
       for (const match of prematchCloseAlerts) {
         const now = new Date();
         if (!this.alertStore.shouldSend(match.id, now)) {
@@ -257,9 +271,6 @@ export class OddsMonitor {
 
       this.statusValue.lastRun = summary;
 
-      // Polling mimarisi geregi scraper/API her dongude oran okumak zorunda degil.
-      // Bos ve saglikli bir dongu, son basarili oran tablosunu silmemeli. Aksi
-      // halde Telegram sinyali geldikten bir poll sonra arayuz tekrar bos gorunur.
       if (comparison.freshQuotes.length > 0) {
         this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 40).map((quote) => ({
           event: `${quote.homeTeam} - ${quote.awayTeam}`,
@@ -304,8 +315,6 @@ export class OddsMonitor {
     } catch (error) {
       const message = errorMessage(error);
 
-      // Provider tarafinda tamamen hata olsa bile Sheet aynasini guncelle. Boylece
-      // bitmis/stale maclar bir veri kaynagi timeout oldu diye tabloda takili kalmaz.
       try {
         const cleanupTime = new Date();
         await this.dailySheet.record(this.provider.getLastFixtures?.() ?? [], [], [], cleanupTime);
