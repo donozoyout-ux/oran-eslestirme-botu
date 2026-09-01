@@ -67,7 +67,25 @@ export function rawOddsRows(entries: OddsHistoryEntry[]): SheetValue[][] {
     "Kaynak Güncelleme",
   ]];
 
-  for (const entry of latestRawOdds(entries)) {
+  const latest = latestRawOdds(entries);
+  if (latest.length === 0) {
+    rows.push([
+      "",
+      "Henüz gerçek oran verisi gelmedi",
+      "BEKLE",
+      "Maç/oran kaynağı geldikçe bu tablo otomatik yenilenir",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+    return rows;
+  }
+
+  for (const entry of latest) {
     rows.push([
       entry.capturedAt,
       entry.event,
@@ -99,6 +117,9 @@ function spreadsheetIdFromUrl(url: string): string {
  * sekmesine ve Oran_Gecmisi sekmesine yazar. Böylece fixture filtresi hiçbir gerçek oranı
  * kullanıcıdan saklamaz; yazma hatası da mirror.sync'i fail ederek /status içindeki
  * dailySheet.googleSheets.lastError alanına düşer.
+ *
+ * Oran gelmeyen yeni bir günde de sekmeler mutlaka güncellenir. Böylece önceki günün
+ * oranları yanlışlıkla ekranda kalmaz; kullanıcı açık bir "veri bekleniyor" satırı görür.
  */
 export function enableRawOddsGoogleSheet(mirror: GoogleSheetsMirror): GoogleSheetsMirror {
   const target = mirror as unknown as PatchableGoogleSheetsMirror;
@@ -108,8 +129,6 @@ export function enableRawOddsGoogleSheet(mirror: GoogleSheetsMirror): GoogleShee
     await originalSync(dataset);
 
     const rows = rawOddsRows(dataset.oddsHistory);
-    if (rows.length <= 1) return;
-
     const token = await target.accessToken();
     const spreadsheetId = spreadsheetIdFromUrl(target.url);
     const tables: RawSheetTable[] = [
