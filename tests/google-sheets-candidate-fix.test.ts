@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DailySheetDataset, OddsHistoryEntry } from "../src/daily-match-sheet.js";
-import { googleSheetCandidateFixInternals } from "../src/google-sheets-candidate-fix.js";
+import { googleSheetCandidateFixV2Internals } from "../src/google-sheets-candidate-fix-v2.js";
 
 const now = new Date("2026-09-01T19:30:00.000Z");
 
@@ -44,7 +44,7 @@ function dataset(entries: OddsHistoryEntry[]): DailySheetDataset {
 
 describe("Google Sheet candidate reconciliation", () => {
   it("farkli provider event ID'lerini takim adiyla ayni maca birlestirir", () => {
-    const result = googleSheetCandidateFixInternals.candidateRows(dataset([
+    const result = googleSheetCandidateFixV2Internals.buildCandidates(dataset([
       entry("scraper", "a", 2.00),
       entry("api_football", "b", 2.02),
       entry("other", "c", 2.12),
@@ -52,16 +52,16 @@ describe("Google Sheet candidate reconciliation", () => {
 
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]).toMatchObject({
-      event: "Hull City - Swansea City",
       sourceCount: 3,
       verdict: "GÜÇLÜ ADAY",
       marketKey: "total_goals",
     });
+    expect(result.rows[0]?.fixture.homeTeam).toBe("Hull City");
     expect(result.rows[0]!.valuePercent).toBeGreaterThan(2.5);
   });
 
   it("canli 1X2'yi skor/dakika baglami yokken BEKLE yapar", () => {
-    const result = googleSheetCandidateFixInternals.candidateRows(dataset([
+    const result = googleSheetCandidateFixV2Internals.buildCandidates(dataset([
       entry("scraper", "a", 1.50, "match_winner_3way"),
       entry("api_football", "b", 1.52, "match_winner_3way"),
       entry("other", "c", 1.65, "match_winner_3way"),
@@ -72,7 +72,7 @@ describe("Google Sheet candidate reconciliation", () => {
   });
 
   it("aktif mac varsa BUGUN_NE_OYNANIR tablosunu hic bos birakmaz", () => {
-    const rows = googleSheetCandidateFixInternals.todayRows(dataset([]), now);
+    const rows = googleSheetCandidateFixV2Internals.todayRows(dataset([]), now);
     expect(rows).toHaveLength(2);
     expect(rows[1]?.[2]).toBe("BEKLE");
     expect(String(rows[1]?.[3])).toContain("Hull City");
