@@ -7,6 +7,7 @@ import { GoogleSheetsMirror } from "./google-sheets-mirror.js";
 import { enableGoogleSheetLayoutFix } from "./google-sheets-layout-fix.js";
 import { enableRawOddsGoogleSheet } from "./google-sheets-raw-odds.js";
 import { enableSafeGoogleSheetRefresh } from "./google-sheets-safe-refresh.js";
+import { enableGoogleSheetVisualTheme } from "./google-sheets-visual-theme.js";
 import { errorMessage, logger } from "./logger.js";
 import { OddsMonitor } from "./monitor.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
@@ -33,11 +34,11 @@ try {
     config.googleSheetsSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey,
   );
   const googleSheetsMirror = googleSheetsEnabled
-    ? enableRawOddsGoogleSheet(enableGoogleSheetLayoutFix(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
+    ? enableRawOddsGoogleSheet(enableGoogleSheetVisualTheme(enableGoogleSheetLayoutFix(enableSafeGoogleSheetRefresh(new GoogleSheetsMirror({
         spreadsheetId: config.googleSheetsSpreadsheetId!,
         serviceAccountEmail: config.googleServiceAccountEmail!,
         privateKey: config.googlePrivateKey!,
-      }))))
+      })))))
     : undefined;
   const googleResultsMirror = googleSheetsEnabled
     ? new GoogleResultsMirror({
