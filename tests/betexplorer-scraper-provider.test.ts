@@ -27,14 +27,15 @@ function candidate(phaseHint: "prematch" | "live"): BetExplorerCandidate {
 }
 
 describe("BetExplorer scraper", () => {
-  it("yalnizca Avrupa'nin Big Five ust liglerini izler", () => {
+  it("Big Five ust ligleri ile Championship'i izler", () => {
     expect(isLeagueInScope("https://www.betexplorer.com/football/england/premier-league/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/england/championship/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/spain/la-liga/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/germany/bundesliga/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/italy/serie-a/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/france/ligue-1/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/turkey/super-lig/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
-    expect(isLeagueInScope("https://www.betexplorer.com/football/england/championship/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/england/league-one/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
     expect(isLeagueInScope("https://www.betexplorer.com/football/netherlands/eredivisie/a-b/ABCDEFGH/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
   });
 

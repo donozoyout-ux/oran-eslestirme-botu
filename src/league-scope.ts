@@ -2,8 +2,8 @@ export const DEFAULT_LEAGUE_SCOPE = "turkey_europe_top10_big5_tier3" as const;
 
 export type LeagueScope = typeof DEFAULT_LEAGUE_SCOPE | "all";
 
-const BIG_FIVE_TOP_FLIGHT: Readonly<Record<string, readonly string[]>> = {
-  england: ["premier-league"],
+const TRACKED_LEAGUES: Readonly<Record<string, readonly string[]>> = {
+  england: ["premier-league", "championship"],
   spain: ["la-liga"],
   germany: ["bundesliga"],
   italy: ["serie-a"],
@@ -34,12 +34,12 @@ function leaguePath(url: string): { country: string; competition: string } | nul
   }
 }
 
-/** BetExplorer/web kaynaklari icin sadece Avrupa'nin Big Five ust ligleri. */
+/** BetExplorer/web kaynaklari icin Big Five ust ligleri + English Championship. */
 export function isLeagueInScope(url: string, scope: LeagueScope): boolean {
   if (scope === "all") return true;
   const path = leaguePath(url);
   if (!path) return false;
-  return (BIG_FIVE_TOP_FLIGHT[path.country] ?? []).includes(path.competition);
+  return (TRACKED_LEAGUES[path.country] ?? []).includes(path.competition);
 }
 
 /** API tabanli kaynaklarda URL yerine ulke + lig adi gelir. */
@@ -51,10 +51,10 @@ export function isLeagueLabelInScope(
   if (scope === "all") return true;
   if (!competition) return false;
   const countrySlug = countryKey(country ?? "");
-  return (BIG_FIVE_TOP_FLIGHT[countrySlug] ?? []).includes(slug(competition));
+  return (TRACKED_LEAGUES[countrySlug] ?? []).includes(slug(competition));
 }
 
 export function leagueScopeLabel(scope: LeagueScope): string {
   if (scope === "all") return "Tum ligler";
-  return "Premier League + La Liga + Bundesliga + Serie A + Ligue 1";
+  return "Premier League + Championship + La Liga + Bundesliga + Serie A + Ligue 1";
 }

@@ -52,7 +52,7 @@ export class ManagedApiFootballProvider implements OddsProvider {
       this.quoteCount = quotes.length;
 
       if (fixtures.length === 0) {
-        this.lastError = "API-Football bugunun Big Five fiksturunda 0 uygun mac dondurdu.";
+        this.lastError = "API-Football bugunun izlenen 6 lig fiksturunda 0 uygun mac dondurdu.";
         this.nextFixtureRetryAt = now + this.retryMs;
         this.publish("empty_fixture_catalog");
         return quotes;
@@ -69,14 +69,10 @@ export class ManagedApiFootballProvider implements OddsProvider {
       this.quoteCount = 0;
       this.lastError = errorText(error);
 
-      // Fikstur katalogu hic olusmadiysa dakikada bir ayni hatali cagrinin
-      // kotayi tuketmesini engelle; 15 dakika sonra temiz instance ile dene.
       if (fixtures.length === 0) {
         this.nextFixtureRetryAt = now + this.retryMs;
         this.publish("fixture_error");
       } else {
-        // Katalog var, sadece live odds gibi sonraki bir endpoint hata vermis
-        // olabilir. Fiksturu koru ve normal polling dongusunun devam etmesine izin ver.
         this.publish("odds_error");
       }
       throw error;
@@ -95,7 +91,7 @@ export class ManagedApiFootballProvider implements OddsProvider {
     setProviderDiagnostic(this.name, {
       enabled: true,
       status,
-      leagueScope: "Premier League, La Liga, Bundesliga, Serie A, Ligue 1",
+      leagueScope: "Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1",
       fixtureCount: this.fixtureCount,
       quoteCount: this.quoteCount,
       lastProviderRunAt: this.lastProviderRunAt === null ? null : new Date(this.lastProviderRunAt).toISOString(),
