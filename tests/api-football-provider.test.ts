@@ -7,7 +7,7 @@ const commonOptions = {
   maxFixtures: 2,
   fixtureCacheMinutes: 30,
   prematchCacheMinutes: 120,
-  liveCacheMinutes: 10,
+  liveCacheMinutes: 3,
   dailyRequestBudget: 80,
   leagueScope: "turkey_europe_top10_big5_tier3" as const,
   maxLiveEventAgeMinutes: 180,
@@ -43,14 +43,13 @@ describe("ApiFootballProvider", () => {
     expect(first).toEqual([]);
     expect(second).toEqual([]);
     expect(urls.filter((url) => url.includes("/fixtures?date=")).length).toBe(1);
-    expect(urls.some((url) => url.includes("/fixtures?live=all"))).toBe(false);
-    expect(urls.some((url) => url.includes("/odds"))).toBe(false);
+    expect(urls.some((url) => url.endsWith("/odds/live"))).toBe(false);
     expect(provider.getLastFixtures()).toEqual([
       expect.objectContaining({ sourceEventId: "101", phase: "prematch" }),
     ]);
   });
 
-  it("kayitli mac saati gelince live heartbeat olmadan direkt odds/live kullanir ve marketleri normalize eder", async () => {
+  it("kayitli mac saati gelince tek odds/live batch istegi kullanir ve marketleri normalize eder", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-29T17:40:00.000Z"));
     const urls: string[] = [];
@@ -68,7 +67,7 @@ describe("ApiFootballProvider", () => {
           }],
         }), { status: 200, headers });
       }
-      if (url.includes("/odds/live?fixture=303")) {
+      if (url.endsWith("/odds/live")) {
         return new Response(JSON.stringify({
           errors: [],
           response: [{
@@ -98,8 +97,8 @@ describe("ApiFootballProvider", () => {
     const liveQuotes = await provider.fetchQuotes();
 
     expect(urls.filter((url) => url.includes("/fixtures?date=")).length).toBe(1);
-    expect(urls.some((url) => url.includes("/fixtures?live=all"))).toBe(false);
-    expect(urls.filter((url) => url.includes("/odds/live?fixture=303")).length).toBe(1);
+    expect(urls.filter((url) => url.endsWith("/odds/live")).length).toBe(1);
+    expect(urls.some((url) => url.includes("/odds/live?fixture="))).toBe(false);
     expect(provider.getLastFixtures()).toEqual([
       expect.objectContaining({ sourceEventId: "303", phase: "live" }),
     ]);
@@ -109,7 +108,52 @@ describe("ApiFootballProvider", () => {
     expect(liveQuotes.some((quote) => quote.marketKey === "corners" && quote.line === 9.5)).toBe(true);
   });
 
-  it("live odds cache suresinde ayni maca tekrar API cagrisi yapmaz", async () => {
+  it("ayni batch cevabindan birden fazla canli maci tek API istegiyle doldurur", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-29T18:30:00.000Z"));
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      const headers = { "x-ratelimit-requests-remaining": "99", "content-type": "application/json" };
+      if (url.includes("/fixtures?date=")) {
+        return new Response(JSON.stringify({ errors: [], response: [
+          {
+            fixture: { id: 202, date: "2026-08-29T18:00:00+00:00", status: { short: "1H" } },
+            league: { name: "Premier League", country: "England" },
+            teams: { home: { name: "Home A" }, away: { name: "Away A" } },
+          },
+          {
+            fixture: { id: 203, date: "2026-08-29T18:05:00+00:00", status: { short: "1H" } },
+            league: { name: "Championship", country: "England" },
+            teams: { home: { name: "Home B" }, away: { name: "Away B" } },
+          },
+        ] }), { status: 200, headers });
+      }
+      if (url.endsWith("/odds/live")) {
+        return new Response(JSON.stringify({ errors: [], response: [
+          {
+            fixture: { id: 202 }, update: "2026-08-29T18:29:30+00:00",
+            bookmakers: [{ name: "Bet365", bets: [{ name: "Match Winner", values: [{ value: "Home", odd: "2.00" }] }] }],
+          },
+          {
+            fixture: { id: 203 }, update: "2026-08-29T18:29:40+00:00",
+            bookmakers: [{ name: "Bet365", bets: [{ name: "Match Winner", values: [{ value: "Away", odd: "2.50" }] }] }],
+          },
+        ] }), { status: 200, headers });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+
+    const provider = new ApiFootballProvider(commonOptions);
+    const quotes = await provider.fetchQuotes();
+
+    expect(urls.filter((url) => url.endsWith("/odds/live")).length).toBe(1);
+    expect(quotes.some((quote) => quote.sourceEventId === "202" && quote.homeTeam === "Home A")).toBe(true);
+    expect(quotes.some((quote) => quote.sourceEventId === "203" && quote.awayTeam === "Away B")).toBe(true);
+  });
+
+  it("live odds cache suresinde toplu API cagrisi tekrar edilmez", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-29T18:30:00.000Z"));
     const urls: string[] = [];
@@ -131,7 +175,6 @@ describe("ApiFootballProvider", () => {
     await provider.fetchQuotes();
 
     expect(urls.filter((url) => url.includes("/fixtures?date=")).length).toBe(1);
-    expect(urls.filter((url) => url.includes("/odds/live?fixture=202")).length).toBe(1);
-    expect(urls.some((url) => url.includes("/fixtures?live=all"))).toBe(false);
+    expect(urls.filter((url) => url.endsWith("/odds/live")).length).toBe(1);
   });
 });
