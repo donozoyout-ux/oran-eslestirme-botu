@@ -68,13 +68,24 @@ function apiFootballProvider(config: AppConfig): OddsProvider | null {
     return null;
   }
 
+  // Monitor 5 dakikadan eski quote'u varsayilan ayarda stale sayiyor. Railway'de
+  // eski API_FOOTBALL_LIVE_CACHE_MINUTES=10 gibi bir env kalsa bile live odds
+  // cache'i freshness penceresinin disina tasmasin. 30 sn guvenlik payi birak.
+  const freshnessSafeLiveCacheMinutes = Math.max(
+    1,
+    Math.min(
+      config.apiFootballLiveCacheMinutes,
+      Math.floor(Math.max(60, config.maxQuoteAgeSeconds - 30) / 60),
+    ),
+  );
+
   const factory = (): ApiFootballProvider => new ApiFootballProvider({
     apiKey: config.apiFootballKey!,
     bookmakerKeys: config.bookmakerKeys,
     maxFixtures: config.apiFootballMaxFixtures,
     fixtureCacheMinutes: config.apiFootballFixtureCacheMinutes,
     prematchCacheMinutes: config.apiFootballPrematchCacheMinutes,
-    liveCacheMinutes: config.apiFootballLiveCacheMinutes,
+    liveCacheMinutes: freshnessSafeLiveCacheMinutes,
     dailyRequestBudget: config.apiFootballDailyRequestBudget,
     leagueScope: config.leagueScope,
     maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
