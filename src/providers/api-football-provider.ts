@@ -168,6 +168,7 @@ export class ApiFootballProvider implements OddsProvider {
   private fixtureFetchedDay: string | null = null;
   private readonly oddsCache = new Map<string, CachedFixtureOdds>();
   private readonly lastOddsCheckByFixture = new Map<string, number>();
+  private lastLiveOddsBatchAttemptAt: number | null = null;
   private budgetDay = dayKey(new Date());
   private requestsToday = 0;
   private reportedRemaining: number | null = null;
@@ -183,10 +184,10 @@ export class ApiFootballProvider implements OddsProvider {
     this.resetBudgetIfNeeded(now);
     await this.refreshDailyFixturesIfNeeded(now, signal);
 
-    const selected = this.selectLiveFixtures(now);
-    await Promise.all(selected.map((fixture) => this.refreshLiveOddsIfDue(fixture, now, signal)));
+    const liveFixtures = this.selectLiveFixtures(now);
+    await this.refreshLiveOddsBatchIfDue(liveFixtures, now, signal);
 
-    const activeIds = new Set(selected.map((fixture) => fixture.sourceEventId));
+    const activeIds = new Set(liveFixtures.map((fixture) => fixture.sourceEventId));
     return [...this.oddsCache.entries()]
       .filter(([id]) => activeIds.has(id))
       .flatMap(([, cached]) => cached.quotes);
@@ -224,14 +225,12 @@ export class ApiFootballProvider implements OddsProvider {
   }
 
   private selectLiveFixtures(now: Date): MatchFixture[] {
+    // /odds/live endpointi tum canli maclari tek istekte dondurebildigi icin
+    // artik mac basina kota harcamiyoruz. Izlenen liglerdeki tum aktif fikstur
+    // ayni batch cevabindan eslestirilir.
     return this.currentFixtures(now)
       .filter((fixture) => fixture.phase === "live")
-      .sort((a, b) => {
-        const lastA = this.lastOddsCheckByFixture.get(a.sourceEventId) ?? 0;
-        const lastB = this.lastOddsCheckByFixture.get(b.sourceEventId) ?? 0;
-        return lastA - lastB || Date.parse(a.commenceTime) - Date.parse(b.commenceTime);
-      })
-      .slice(0, this.options.maxFixtures);
+      .sort((a, b) => Date.parse(a.commenceTime) - Date.parse(b.commenceTime));
   }
 
   private fixtureFromApi(item: ApiFixture): MatchFixture | null {
@@ -269,17 +268,49 @@ export class ApiFootballProvider implements OddsProvider {
     });
   }
 
-  private async refreshLiveOddsIfDue(fixture: MatchFixture, now: Date, signal?: AbortSignal): Promise<void> {
-    if (fixture.phase !== "live") return;
+  private async refreshLiveOddsBatchIfDue(fixtures: MatchFixture[], now: Date, signal?: AbortSignal): Promise<void> {
+    if (fixtures.length === 0) return;
 
-    const lastAttempt = this.lastOddsCheckByFixture.get(fixture.sourceEventId);
-    if (lastAttempt !== undefined && now.getTime() - lastAttempt < this.options.liveCacheMinutes * 60_000) return;
+    const nowMs = now.getTime();
+    if (
+      this.lastLiveOddsBatchAttemptAt !== null &&
+      nowMs - this.lastLiveOddsBatchAttemptAt < this.options.liveCacheMinutes * 60_000
+    ) {
+      return;
+    }
     if (!this.canRequest()) return;
 
-    this.lastOddsCheckByFixture.set(fixture.sourceEventId, now.getTime());
-    const payload = await this.request<ApiOddsItem>(`/odds/live?fixture=${encodeURIComponent(fixture.sourceEventId)}`, signal);
-    const quotes = this.mapOdds(payload, fixture, now);
-    this.oddsCache.set(fixture.sourceEventId, { phase: "live", fetchedAt: now.getTime(), quotes });
+    // Hata durumunda her 60 saniyede ayni endpointi dovup kotayi tuketmemek icin
+    // deneme zamanini istekten once kaydediyoruz. Sonraki normal batch penceresinde
+    // otomatik tekrar denenir.
+    this.lastLiveOddsBatchAttemptAt = nowMs;
+    const payload = await this.request<ApiOddsItem>("/odds/live", signal);
+    const itemsByFixture = new Map<string, ApiOddsItem[]>();
+    for (const item of payload) {
+      const id = item.fixture?.id;
+      if (!id) continue;
+      const key = String(id);
+      const list = itemsByFixture.get(key) ?? [];
+      list.push(item);
+      itemsByFixture.set(key, list);
+    }
+
+    let quoteCount = 0;
+    for (const fixture of fixtures) {
+      const items = itemsByFixture.get(fixture.sourceEventId) ?? [];
+      const quotes = this.mapOdds(items, fixture, now);
+      this.lastOddsCheckByFixture.set(fixture.sourceEventId, nowMs);
+      this.oddsCache.set(fixture.sourceEventId, { phase: "live", fetchedAt: nowMs, quotes });
+      quoteCount += quotes.length;
+    }
+
+    logger.info("API-Football toplu canlı oran turu tamamlandı.", {
+      trackedFixtures: fixtures.length,
+      returnedFixtures: itemsByFixture.size,
+      quotes: quoteCount,
+      requestsToday: this.requestsToday,
+      dailyBudget: this.options.dailyRequestBudget,
+    });
   }
 
   private mapOdds(items: ApiOddsItem[], fixture: MatchFixture, now: Date): OddsQuote[] {
@@ -355,6 +386,7 @@ export class ApiFootballProvider implements OddsProvider {
     this.scheduledFixtures = [];
     this.oddsCache.clear();
     this.lastOddsCheckByFixture.clear();
+    this.lastLiveOddsBatchAttemptAt = null;
   }
 
   private canRequest(): boolean {
