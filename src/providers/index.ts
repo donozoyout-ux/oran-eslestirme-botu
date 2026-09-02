@@ -8,6 +8,7 @@ import { CompositeOddsProvider } from "./composite-provider.js";
 import { ApiFootballProvider } from "./api-football-provider.js";
 import { ManagedApiFootballProvider } from "./api-football-managed-provider.js";
 import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js";
+import { NesineBulletinProvider } from "./nesine-bulletin-provider.js";
 import { ResilientOddsProvider } from "./resilient-provider.js";
 import { RoleSeparatedOddsProvider } from "./role-separated-provider.js";
 
@@ -49,6 +50,13 @@ function betExplorerScraper(config: AppConfig): BetExplorerScraperProvider {
     prematchFinalPollMinutes: config.prematchFinalPollMinutes,
     livePollMinutes: config.livePollMinutes,
     executablePath: config.chromiumExecutablePath,
+  });
+}
+
+function nesineProvider(config: AppConfig): NesineBulletinProvider {
+  return new NesineBulletinProvider({
+    leagueScope: config.leagueScope,
+    cacheMinutes: 5,
   });
 }
 
@@ -108,32 +116,34 @@ export function createProvider(config: AppConfig): OddsProvider {
   if (config.provider === "mock") return new MockOddsProvider();
 
   // Acikca ODDS_PROVIDER=the_odds_api secilirse The Odds API ana kaynak olur.
-  // Lig kapsami Big Five ust ligleri + English Championship'tir.
+  // Nesine burada da bagimsiz yerel iddaa referansi olarak eklenir.
   if (config.provider === "the_odds_api") {
-    const providers: OddsProvider[] = [theOddsApiProvider(config)];
+    const providers: OddsProvider[] = [theOddsApiProvider(config), nesineProvider(config)];
     const apiFootball = apiFootballProvider(config);
     const footballData = footballDataProvider(config);
     if (apiFootball) providers.push(apiFootball);
     if (footballData) providers.push(footballData);
-    return providers.length === 1 ? providers[0]! : new CompositeOddsProvider(providers);
+    return new CompositeOddsProvider(providers);
   }
 
   // Normal production gorev paylasimi:
   // Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1.
-  // 1) BetExplorer scraping: ana prematch + ek live oranlar.
-  // 2) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
-  // 3) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
-  // 4) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
+  // 1) BetExplorer: ana prematch + ek live oranlar.
+  // 2) Nesine public iddaa bulteni: bagimsiz Turkiye prematch fiyat referansi.
+  // 3) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
+  // 4) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
+  // 5) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
   const scraper = betExplorerScraper(config);
   const liveApi = apiFootballProvider(config) ?? undefined;
   const footballData = footballDataProvider(config);
-  const fixtureProviders = footballData ? [footballData] : [];
+  const supportProviders: OddsProvider[] = [nesineProvider(config)];
+  if (footballData) supportProviders.push(footballData);
   const fallbackProvider = config.oddsApiKey ? theOddsApiProvider(config) : undefined;
 
   const routed = new RoleSeparatedOddsProvider(
     scraper,
     liveApi,
-    fixtureProviders,
+    supportProviders,
     fallbackProvider,
     { fallbackCooldownMinutes: 60 },
   );
