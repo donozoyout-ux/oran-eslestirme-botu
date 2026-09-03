@@ -51,6 +51,14 @@ services:
         value: "true"
       - key: ODDS_API_KEY
         sync: false
+      - key: SPORTMONKS_API_TOKEN
+        sync: false
+      - key: SPORTMONKS_REFRESH_MINUTES
+        value: "3"
+      - key: SPORTMONKS_MAX_PAGES
+        value: "4"
+      - key: SPORTMONKS_INCLUDE_ODDS
+        value: "true"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID

@@ -35,6 +35,17 @@ football-data fikstur/durum dogrulamasi icin:
 FOOTBALL_DATA_TOKEN=<secret>
 ```
 
+Sportmonks resmi fikstur, canli skor ve abonelik destekliyorsa oran kaynagi icin:
+
+```text
+SPORTMONKS_API_TOKEN=<secret>
+SPORTMONKS_REFRESH_MINUTES=3
+SPORTMONKS_MAX_PAGES=4
+SPORTMONKS_INCLUDE_ODDS=true
+```
+
+Sportmonks hesabinda Odds add-on yoksa uygulama kapanmaz; `fixtures_only` moduna gecerek fikstur ve skor verisini kullanmaya devam eder.
+
 Google Sheets kullaniliyorsa ucu birlikte girilmelidir:
 
 ```text
@@ -63,6 +74,8 @@ Deploy `Active` olduktan sonra Railway domaininde:
 - `lastError`: son hata
 - `lastRun.quotesFetched`: cekilen oran sayisi
 - `recentQuotes`: son oranlar
+- `providerDiagnostics.sportmonks.mode`: `fixtures_and_odds`, `fixtures_only` veya `disabled`
+- `providerDiagnostics.sportmonks.remainingRequests`: Sportmonks kalan kota bilgisi
 
 ## 4. Railway'de 7/24 icin kritik not
 

@@ -21,6 +21,7 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - `%8` esigi ilk kez gecildiginde acilis/guncel oran aciklamali Telegram hareket bildirimi
 - Gunluk mac listesini ve oran gecmisini Google Sheets/Excel uyumlu CSV olarak indirme
 - Opsiyonel Google Sheets canli aynasi: `Maclar`, `Oran_Gecmisi`, `Sinyaller`
+- Sportmonks API 3.0 ile fikstur, mac durumu, canli skor ve paket destekliyorsa mac onu/canli oranlar
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
 - Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
 - Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
@@ -40,6 +41,8 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 Eski Render servislerinde kalmis `ODDS_PROVIDER=mock` degeri, `NODE_ENV=production` ortaminda otomatik olarak scraper'a yukseltirilir. Uretimde ozellikle demo istenirse `ALLOW_MOCK_IN_PRODUCTION=true` ayarlanabilir.
 
 Nesine, Misli ve Bilyoner bu sunucudan acilan herkese acik sayfada kullanilabilir oran tablosu dondurmedigi icin gercek kaynak olarak etiketlenmez. Onlar icin resmi/lisansli veri erisimi gerekir.
+
+Sportmonks baglantisi resmi API uzerinden calisir. Temel futbol paketi fikstur ve skor saglar; oranlar Sportmonks hesabinda ayrica Odds add-on erisimi gerektirir. Add-on yoksa servis otomatik olarak `fixtures_only` moduna gecer ve diger oran kaynaklariyla calismayi surdurur. Kaynagin modu, kota kalani, fikstur ve oran sayisi `/status` cevabindaki `providerDiagnostics.sportmonks` alaninda gorulur.
 
 Gol toplaminda `1.5`, `2.5`, `3.5`, `4.5` ve `5.5`; kart toplaminda `1.5`-`5.5`; korner toplaminda `6.5`-`11.5` gibi cizgiler kanonik modelde ve Telegram aciklamasinda desteklenir. Mevcut BetExplorer sayfasi gol Alt/Ust pazarini dondurur; kart ve korner satirlari gorunmedigi icin bu iki pazar ancak bunlari saglayan resmi/lisansli bir veri adaptoru baglandiginda gercek bildirim uretir.
 
@@ -135,6 +138,20 @@ DRY_RUN=true
 
 Ucretsiz kotayi tuketmemek icin once iki lig, uc temel pazar ve 60 saniyelik tarama araligiyla baslayin. Saglayici listede bulunmayan bir bookmaker icin veri dondurmez; bu normaldir.
 
+## Sportmonks kurulumu
+
+1. Sportmonks hesabinda bir API token olusturun.
+2. Railway backend servisinin `Variables` bolumune tokeni ekleyin; GitHub'a yazmayin:
+
+```dotenv
+SPORTMONKS_API_TOKEN=hesaptaki_gizli_token
+SPORTMONKS_REFRESH_MINUTES=3
+SPORTMONKS_MAX_PAGES=4
+SPORTMONKS_INCLUDE_ODDS=true
+```
+
+Servis gunun maclarini Istanbul saat diliminde, sayfa basina 50 kayitla alir. `SPORTMONKS_MAX_PAGES=4` bir turda en fazla 200 mac demektir. Mevcut lig kapsam filtresi Sportmonks verisine de uygulanir. Odds add-on etkinse bookmaker, pazar ve secimler ortak modele donusturulerek BetExplorer, API-Football ve The Odds API verileriyle ayni motorda karsilastirilir.
+
 ## Telegram kurulumu
 
 1. Telegram'da `@BotFather` ile `/newbot` komutunu kullanin.
@@ -168,6 +185,10 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `ALLOW_MOCK_IN_PRODUCTION` | `false` | Eski Render ayarinda gercek taramaya otomatik gecisi kapatir |
 | `SPORT_KEYS` | iki futbol ligi | Virgul ayrimli lig anahtarlari |
 | `BOOKMAKER_KEYS` | secilen kaynaklar | Virgul ayrimli bookmaker anahtarlari |
+| `SPORTMONKS_API_TOKEN` | bos | Sportmonks gizli API tokeni; ayarlanirsa resmi kaynak etkinlesir |
+| `SPORTMONKS_REFRESH_MINUTES` | `3` | Sportmonks fikstur/skor/oran yenileme araligi |
+| `SPORTMONKS_MAX_PAGES` | `4` | Bir turda okunacak azami 50 kayitlik sayfa sayisi |
+| `SPORTMONKS_INCLUDE_ODDS` | `true` | Paket izin veriyorsa prematch ve canli oranlari da ister |
 | `ODDS_TOLERANCE_PERCENT` | `2` | Bildirim icin azami goreli fark |
 | `POLL_INTERVAL_SECONDS` | `60` | Tarama araligi; en az 10 saniye |
 | `SCRAPER_MAX_MATCHES` | `2` | Bir turda acilacak azami mac sayfasi |

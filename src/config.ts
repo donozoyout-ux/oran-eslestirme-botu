@@ -9,6 +9,7 @@ export interface AppConfig {
   oddsApiKey?: string;
   apiFootballKey?: string;
   footballDataToken?: string;
+  sportmonksToken?: string;
   sportKeys: string[];
   bookmakerKeys: string[];
   regions: string[];
@@ -20,6 +21,9 @@ export interface AppConfig {
   footballDataCompetitionCodes: string[];
   footballDataCacheMinutes: number;
   footballDataDailyRequestBudget: number;
+  sportmonksRefreshMinutes: number;
+  sportmonksMaxPages: number;
+  sportmonksIncludeOdds: boolean;
   scraperMaxMatches: number;
   scraperPageTimeoutMs: number;
   scraperWaitMs: number;
@@ -106,6 +110,7 @@ export function loadConfig(): AppConfig {
     oddsApiKey: optional("ODDS_API_KEY"),
     apiFootballKey: optional("API_FOOTBALL_KEY"),
     footballDataToken: optional("FOOTBALL_DATA_TOKEN"),
+    sportmonksToken: optional("SPORTMONKS_API_TOKEN"),
     sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league"),
     bookmakerKeys: csv("BOOKMAKER_KEYS", "pinnacle,betfair_ex_eu,betfair,bet365"),
     regions: csv("REGIONS", "eu,uk"),
@@ -117,6 +122,9 @@ export function loadConfig(): AppConfig {
     footballDataCompetitionCodes: csv("FOOTBALL_DATA_COMPETITIONS", "PL,PD,BL1,SA,FL1,CL"),
     footballDataCacheMinutes: numberValue("FOOTBALL_DATA_CACHE_MINUTES", 30, { min: 5, max: 1_440 }),
     footballDataDailyRequestBudget: numberValue("FOOTBALL_DATA_DAILY_REQUEST_BUDGET", 30, { min: 1, max: 100 }),
+    sportmonksRefreshMinutes: numberValue("SPORTMONKS_REFRESH_MINUTES", 3, { min: 1, max: 60 }),
+    sportmonksMaxPages: numberValue("SPORTMONKS_MAX_PAGES", 4, { min: 1, max: 20 }),
+    sportmonksIncludeOdds: booleanValue("SPORTMONKS_INCLUDE_ODDS", true),
     scraperMaxMatches: numberValue("SCRAPER_MAX_MATCHES", 2, { min: 1, max: 10 }),
     scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 60_000, { min: 5_000, max: 60_000 }),
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),

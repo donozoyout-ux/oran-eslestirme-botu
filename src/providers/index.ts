@@ -10,6 +10,7 @@ import { ManagedApiFootballProvider } from "./api-football-managed-provider.js";
 import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js";
 import { ResilientOddsProvider } from "./resilient-provider.js";
 import { RoleSeparatedOddsProvider } from "./role-separated-provider.js";
+import { SportmonksProvider } from "./sportmonks-provider.js";
 
 const TRACKED_ODDS_API_SPORT_KEYS = [
   "soccer_epl",
@@ -104,6 +105,34 @@ function footballDataProvider(config: AppConfig): FootballDataFixtureProvider | 
   });
 }
 
+function sportmonksProvider(config: AppConfig): SportmonksProvider | null {
+  if (!config.sportmonksToken) {
+    setProviderDiagnostic("sportmonks", {
+      enabled: false,
+      status: "disabled",
+      mode: "disabled",
+      leagueScope: TRACKED_LEAGUE_LABEL,
+      fixtureCount: 0,
+      quoteCount: 0,
+      lastProviderRunAt: null,
+      lastSuccessAt: null,
+      lastError: "SPORTMONKS_API_TOKEN ayarlanmamis.",
+      remainingRequests: null,
+      rateLimitResetSeconds: null,
+    });
+    return null;
+  }
+  return new SportmonksProvider({
+    apiToken: config.sportmonksToken,
+    bookmakerKeys: config.bookmakerKeys,
+    refreshMinutes: config.sportmonksRefreshMinutes,
+    maxPages: config.sportmonksMaxPages,
+    leagueScope: config.leagueScope,
+    maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
+    includeOdds: config.sportmonksIncludeOdds,
+  });
+}
+
 export function createProvider(config: AppConfig): OddsProvider {
   if (config.provider === "mock") return new MockOddsProvider();
 
@@ -113,8 +142,10 @@ export function createProvider(config: AppConfig): OddsProvider {
     const providers: OddsProvider[] = [theOddsApiProvider(config)];
     const apiFootball = apiFootballProvider(config);
     const footballData = footballDataProvider(config);
+    const sportmonks = sportmonksProvider(config);
     if (apiFootball) providers.push(apiFootball);
     if (footballData) providers.push(footballData);
+    if (sportmonks) providers.push(sportmonks);
     return providers.length === 1 ? providers[0]! : new CompositeOddsProvider(providers);
   }
 
@@ -122,12 +153,17 @@ export function createProvider(config: AppConfig): OddsProvider {
   // Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1.
   // 1) BetExplorer scraping: ana prematch + ek live oranlar.
   // 2) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
-  // 3) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
-  // 4) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
+  // 3) Sportmonks: resmi fikstur/skor + abonelik izin veriyorsa prematch/live oranlar.
+  // 4) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
+  // 5) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
   const scraper = betExplorerScraper(config);
   const liveApi = apiFootballProvider(config) ?? undefined;
   const footballData = footballDataProvider(config);
-  const fixtureProviders = footballData ? [footballData] : [];
+  const sportmonks = sportmonksProvider(config);
+  const fixtureProviders: OddsProvider[] = [
+    ...(sportmonks ? [sportmonks] : []),
+    ...(footballData ? [footballData] : []),
+  ];
   const fallbackProvider = config.oddsApiKey ? theOddsApiProvider(config) : undefined;
 
   const routed = new RoleSeparatedOddsProvider(

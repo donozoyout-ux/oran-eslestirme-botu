@@ -75,6 +75,35 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[m]! : (sorted[m - 1]! + sorted[m]!) / 2;
 }
 
+/**
+ * Ayni bookmaker orani birden fazla API/scraper tarafindan tasinabilir. Bunlar
+ * bagimsiz piyasa onayi degildir. Her bookmaker'i tek oy sayar, ayni bookmaker
+ * icin celisen tasiyici fiyatlarini medyanla sakinlestiririz.
+ */
+function independentBookmakerEntries(entries: OddsHistoryEntry[]): OddsHistoryEntry[] {
+  const byBookmaker = new Map<string, OddsHistoryEntry[]>();
+  for (const entry of entries) {
+    const key = normalize(entry.bookmakerKey || entry.bookmaker);
+    if (!key) continue;
+    const list = byBookmaker.get(key) ?? [];
+    list.push(entry);
+    byBookmaker.set(key, list);
+  }
+
+  const result: OddsHistoryEntry[] = [];
+  for (const list of byBookmaker.values()) {
+    const valid = list.filter((entry) => Number.isFinite(entry.price) && entry.price > 1);
+    if (!valid.length) continue;
+    const representative = [...valid].sort((a, b) => {
+      const aTime = Date.parse(a.sourceUpdatedAt) || Date.parse(a.capturedAt) || 0;
+      const bTime = Date.parse(b.sourceUpdatedAt) || Date.parse(b.capturedAt) || 0;
+      return bTime - aTime;
+    })[0]!;
+    result.push({ ...representative, price: median(valid.map((entry) => entry.price)) });
+  }
+  return result;
+}
+
 function clamp(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -128,17 +157,18 @@ function buildCandidates(dataset: DailySheetDataset, now = new Date()): { fixtur
 
   const candidates: Candidate[] = [];
   for (const group of groups.values()) {
-    const first = group.entries[0];
+    const independentEntries = independentBookmakerEntries(group.entries);
+    const first = independentEntries[0];
     const fixture = data.fixtures.get(group.matchKey);
     if (!first || !fixture) continue;
-    const prices = group.entries.map((entry) => entry.price).filter((price) => Number.isFinite(price) && price > 1);
+    const prices = independentEntries.map((entry) => entry.price).filter((price) => Number.isFinite(price) && price > 1);
     if (!prices.length) continue;
-    const best = [...group.entries].sort((a, b) => b.price - a.price)[0]!;
+    const best = [...independentEntries].sort((a, b) => b.price - a.price)[0]!;
     const fairOdds = median(prices);
     const valuePercent = fairOdds > 1 ? (best.price / fairOdds - 1) * 100 : 0;
     const dispersionPercent = fairOdds > 0 ? (Math.max(...prices) - Math.min(...prices)) / fairOdds * 100 : 100;
-    const sourceCount = new Set(group.entries.map((entry) => `${entry.provider}:${entry.bookmakerKey}`)).size;
-    const score = Math.round(
+    const sourceCount = independentEntries.length;
+    const rawScore = Math.round(
       clamp(sourceCount / 3) * 30 +
       clamp(1 - dispersionPercent / 12) * 30 +
       clamp(Math.max(valuePercent, 0) / 6) * 25 +
@@ -147,18 +177,20 @@ function buildCandidates(dataset: DailySheetDataset, now = new Date()): { fixtur
 
     const liveWinner = fixture.phase === "live" && ["match_winner_3way", "match_winner_2way"].includes(first.marketKey);
     let verdict: Verdict = "BEKLE";
-    if (!liveWinner && sourceCount >= 3 && score >= 75 && valuePercent >= 2.5 && dispersionPercent <= 12) verdict = "GÜÇLÜ ADAY";
-    else if (!liveWinner && sourceCount >= 2 && score >= 58 && valuePercent >= 0.5 && dispersionPercent <= 12) verdict = "İZLE";
+    if (!liveWinner && sourceCount >= 3 && rawScore >= 75 && valuePercent >= 2.5 && dispersionPercent <= 12) verdict = "GÜÇLÜ ADAY";
+    else if (!liveWinner && sourceCount >= 2 && rawScore >= 58 && valuePercent >= 0.5 && dispersionPercent <= 12) verdict = "İZLE";
+
+    const score = verdict === "BEKLE" ? Math.min(rawScore, 49) : rawScore;
 
     const reason = liveWinner
       ? "Canlı 1X2 için skor/dakika bağlamı yok; düşük takım oranı öneri sayılmaz."
       : sourceCount < 2
-        ? `Sadece ${sourceCount} bağımsız kaynak var; doğrulama bekleniyor.`
+        ? `Sadece ${sourceCount} bağımsız bookmaker var; doğrulama bekleniyor.`
         : valuePercent < 0.5
           ? `Yeterli value yok (%${valuePercent.toFixed(1)}); BEKLE.`
           : dispersionPercent > 12
             ? `Kaynaklar fazla ayrışıyor (%${dispersionPercent.toFixed(1)}); BEKLE.`
-            : `${sourceCount} kaynak doğruladı; value %${valuePercent.toFixed(1)}, güven ${score}/100.`;
+            : `${sourceCount} bağımsız bookmaker doğruladı; value %${valuePercent.toFixed(1)}, güven ${score}/100.`;
 
     candidates.push({
       matchKey: group.matchKey,
@@ -199,25 +231,27 @@ function buildCandidates(dataset: DailySheetDataset, now = new Date()): { fixtur
 
 function todayRows(dataset: DailySheetDataset, now = new Date()): Cell[][] {
   const data = buildCandidates(dataset, now);
-  const byMatch = new Map(data.rows.map((candidate) => [candidate.matchKey, candidate]));
-  const fixtures = [...data.fixtures.entries()].sort((a, b) => Date.parse(a[1].commenceTime) - Date.parse(b[1].commenceTime));
-  const rows: Cell[][] = [["SIRA", "DURUM", "KARAR", "MAÇ", "NE OYNANIR?", "ORAN", "BOOKMAKER", "GÜVEN", "VALUE %", "KAYNAK", "KISA NEDEN"]];
-  fixtures.forEach(([key, fixture], index) => {
-    const candidate = byMatch.get(key);
-    const choice = !candidate || candidate.verdict === "BEKLE"
-      ? "BEKLE – veri doğrulanıyor"
-      : candidate.line === null
-        ? `${candidate.market} → ${candidate.selection}`
-        : `${candidate.market} ${candidate.line} → ${candidate.selection}`;
+  const strong = data.rows.filter((candidate) => candidate.verdict === "GÜÇLÜ ADAY");
+  const rows: Cell[][] = [["SIRA", "DURUM", "KARAR", "MAÇ", "NE OYNANIR?", "ORAN", "BOOKMAKER", "GÜVEN", "VALUE %", "BAĞIMSIZ BOOKMAKER", "KISA NEDEN"]];
+  strong.forEach((candidate, index) => {
+    const fixture = candidate.fixture;
+    const choice = candidate.line === null
+      ? `${candidate.market} → ${candidate.selection}`
+      : `${candidate.market} ${candidate.line} → ${candidate.selection}`;
     rows.push([
-      index + 1, fixture.phase === "live" ? "CANLI" : "YAKLAŞAN", candidate?.verdict ?? "BEKLE",
+      index + 1, fixture.phase === "live" ? "CANLI" : "YAKLAŞAN", candidate.verdict,
       `${fixture.homeTeam} - ${fixture.awayTeam}`, choice,
-      candidate ? Number(candidate.price.toFixed(3)) : "", candidate?.bookmaker ?? "",
-      candidate ? `${candidate.score}/100` : "", candidate ? Number(candidate.valuePercent.toFixed(1)) : "",
-      candidate?.sourceCount ?? "", candidate?.reason ?? "Henüz oran verisi yok; veri bekleniyor.",
+      Number(candidate.price.toFixed(3)), candidate.bookmaker,
+      `${candidate.score}/100`, Number(candidate.valuePercent.toFixed(1)),
+      candidate.sourceCount, candidate.reason,
     ].map(safe));
   });
-  if (fixtures.length === 0) rows.push(["", "", "BEKLE", "Şu anda aktif maç yok", "Yeni fikstür/oran geldikçe otomatik güncellenecek", "", "", "", "", "", ""].map(safe));
+  if (strong.length === 0) {
+    rows.push([
+      "", "", "BEKLE", "ŞU ANDA DOĞRULANMIŞ KUPON ADAYI YOK", "ŞİMDİLİK KUPON YAPMA",
+      "", "", "", "", "", "En az 3 bağımsız bookmaker + 75 güven + %2,5 value oluşması bekleniyor.",
+    ].map(safe));
+  }
   return rows;
 }
 
@@ -227,18 +261,19 @@ function couponRows(dataset: DailySheetDataset, now = new Date()): Cell[][] {
   const fixtures = [...data.fixtures.entries()].sort((a, b) => Date.parse(a[1].commenceTime) - Date.parse(b[1].commenceTime));
   const rows: Cell[][] = [[
     "Karar", "Puan", "Maç", "Durum", "Pazar", "Periyot", "Seçim", "Çizgi", "En İyi Oran", "Bookmaker",
-    "Piyasa Adil Oran", "Adil Olasılık %", "Piyasa Value %", "Kaynak", "Dağılım %", "Neden", "Güncelleme",
+    "Piyasa Adil Oran", "Adil Olasılık %", "Piyasa Value %", "Bağımsız Bookmaker", "Dağılım %", "Neden", "Güncelleme",
   ]];
   for (const [key, fixture] of fixtures) {
     const candidate = byMatch.get(key);
+    const showNumbers = candidate && candidate.verdict !== "BEKLE";
     rows.push([
       candidate?.verdict ?? "BEKLE", candidate?.score ?? "", `${fixture.homeTeam} - ${fixture.awayTeam}`,
-      fixture.phase === "live" ? "CANLI" : "YAKLAŞAN", candidate?.market ?? "", candidate?.period ?? "",
-      candidate?.selection ?? "", candidate?.line ?? "", candidate ? Number(candidate.price.toFixed(3)) : "",
-      candidate?.bookmaker ?? "", candidate ? Number(candidate.fairOdds.toFixed(3)) : "",
-      candidate && candidate.fairOdds > 0 ? Number((100 / candidate.fairOdds).toFixed(1)) : "",
-      candidate ? Number(candidate.valuePercent.toFixed(1)) : "", candidate?.sourceCount ?? "",
-      candidate ? Number(candidate.dispersionPercent.toFixed(1)) : "",
+      fixture.phase === "live" ? "CANLI" : "YAKLAŞAN", showNumbers ? candidate.market : "", showNumbers ? candidate.period : "",
+      showNumbers ? candidate.selection : "", showNumbers ? candidate.line ?? "" : "", showNumbers ? Number(candidate.price.toFixed(3)) : "",
+      showNumbers ? candidate.bookmaker : "", showNumbers ? Number(candidate.fairOdds.toFixed(3)) : "",
+      showNumbers && candidate.fairOdds > 0 ? Number((100 / candidate.fairOdds).toFixed(1)) : "",
+      showNumbers ? Number(candidate.valuePercent.toFixed(1)) : "", candidate?.sourceCount ?? "",
+      showNumbers ? Number(candidate.dispersionPercent.toFixed(1)) : "",
       candidate?.reason ?? "Henüz yeterli oran verisi yok; kupona eklenmemeli.", candidate?.capturedAt ?? "",
     ].map(safe));
   }
@@ -269,4 +304,11 @@ export function enableGoogleSheetCandidateFixV2(mirror: GoogleSheetsMirror): Goo
   return mirror;
 }
 
-export const googleSheetCandidateFixV2Internals = { eventKey, reconcile, buildCandidates, todayRows, couponRows };
+export const googleSheetCandidateFixV2Internals = {
+  eventKey,
+  reconcile,
+  independentBookmakerEntries,
+  buildCandidates,
+  todayRows,
+  couponRows,
+};

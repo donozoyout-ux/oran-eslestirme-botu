@@ -75,6 +75,29 @@ describe("Google Sheet candidate reconciliation", () => {
     const rows = googleSheetCandidateFixV2Internals.todayRows(dataset([]), now);
     expect(rows).toHaveLength(2);
     expect(rows[1]?.[2]).toBe("BEKLE");
-    expect(String(rows[1]?.[3])).toContain("Hull City");
+    expect(rows[1]?.[3]).toBe("ŞU ANDA DOĞRULANMIŞ KUPON ADAYI YOK");
+    expect(rows[1]?.[4]).toBe("ŞİMDİLİK KUPON YAPMA");
+    expect(rows[1]?.[5]).toBe("");
+    expect(rows[1]?.[8]).toBe("");
+  });
+
+  it("ayni bookmaker'i tasiyan uc provider'i tek bagimsiz bookmaker sayar", () => {
+    const result = googleSheetCandidateFixV2Internals.buildCandidates(dataset([
+      entry("scraper", "bet365", 1.50),
+      entry("api_football", "bet365", 1.52),
+      entry("sportmonks", "bet365", 34),
+    ]), now);
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ sourceCount: 1, verdict: "BEKLE" });
+    expect(result.rows[0]!.price).toBe(1.52);
+
+    const today = googleSheetCandidateFixV2Internals.todayRows(dataset([
+      entry("scraper", "bet365", 1.50),
+      entry("api_football", "bet365", 1.52),
+      entry("sportmonks", "bet365", 34),
+    ]), now);
+    expect(today).toHaveLength(2);
+    expect(today[1]?.[4]).toBe("ŞİMDİLİK KUPON YAPMA");
   });
 });

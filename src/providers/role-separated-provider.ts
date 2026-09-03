@@ -9,7 +9,7 @@ export interface RoleSeparatedProviderOptions {
  * Kaynaklara tek tek gorev verir:
  * - scraper: ana prematch + ek live oran kaynagi
  * - liveApi: fixture katalogu + baslangictan sonra live oran
- * - fixtureProviders: sadece fikstur/durum katkisi
+ * - fixtureProviders: fikstur/durum katkisi; oran donduren resmi kaynaklarin oranlari da birlestirilir
  * - fallback: scraper hata verirse prematch icin son-care kaynak
  *
  * Boylece ayni polling turunda ucretli/kotali API'lere ayni isi yaptirmayiz.
