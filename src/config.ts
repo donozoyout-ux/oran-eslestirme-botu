@@ -64,6 +64,10 @@ export interface AppConfig {
   historicalPriceTolerancePercent: number;
   historicalLineTolerance: number;
   historicalRecencyHalfLifeDays: number;
+  matchIntelligenceEnabled: boolean;
+  matchIntelligenceRecentMatches: number;
+  matchIntelligenceCacheMinutes: number;
+  matchIntelligenceMinSample: number;
   googleSheetsSpreadsheetId?: string;
   googleServiceAccountEmail?: string;
   googlePrivateKey?: string;
@@ -189,6 +193,10 @@ export function loadConfig(): AppConfig {
     historicalPriceTolerancePercent: numberValue("HISTORICAL_PRICE_TOLERANCE_PERCENT", 10, { min: 0, max: 100 }),
     historicalLineTolerance: numberValue("HISTORICAL_LINE_TOLERANCE", 0.5, { min: 0, max: 10 }),
     historicalRecencyHalfLifeDays: numberValue("HISTORICAL_RECENCY_HALF_LIFE_DAYS", 730, { min: 1, max: 10_000 }),
+    matchIntelligenceEnabled: booleanValue("MATCH_INTELLIGENCE_ENABLED", true),
+    matchIntelligenceRecentMatches: numberValue("MATCH_INTELLIGENCE_RECENT_MATCHES", 10, { min: 5, max: 20 }),
+    matchIntelligenceCacheMinutes: numberValue("MATCH_INTELLIGENCE_CACHE_MINUTES", 45, { min: 5, max: 1_440 }),
+    matchIntelligenceMinSample: numberValue("MATCH_INTELLIGENCE_MIN_SAMPLE", 5, { min: 1, max: 10 }),
     googleSheetsSpreadsheetId: optional("GOOGLE_SHEETS_SPREADSHEET_ID"),
     googleServiceAccountEmail: optional("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     googlePrivateKey: optional("GOOGLE_PRIVATE_KEY"),

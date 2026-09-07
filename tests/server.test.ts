@@ -29,6 +29,19 @@ function monitorStub(): OddsMonitor {
         analysis: null,
         message: "Yetersiz tarihsel veri",
       },
+      matchIntelligence: {
+        enabled: true,
+        provider: "sportmonks",
+        cacheSize: 1,
+        lastRunAt: null,
+        lastSuccessAt: null,
+        lastError: null,
+        capabilityMap: { fixtures: "available" },
+        rateLimitRemaining: 100,
+        rateLimitResetSeconds: 60,
+        snapshotsStored: 1,
+        results: [],
+      },
       dailySheet: { date: "2026-08-28", fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [] },
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     }),
@@ -66,6 +79,9 @@ describe("dashboard", () => {
     expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(html).toContain("Oran Eşleştirme Botu");
     expect(html).toContain("fetch('/status'");
+    expect(html).toContain("Match Intelligence");
+    expect(html).toContain("Data Confidence");
+    expect(html).not.toMatch(/>PLAY<|>WATCH<|>PASS</);
   });
 
   it("saglik ucunu korur", async () => {
@@ -93,5 +109,12 @@ describe("dashboard", () => {
       enabled: false,
       message: "Yetersiz tarihsel veri",
     });
+  });
+
+  it("read-only match intelligence diagnostik ucunu sunar", async () => {
+    const baseUrl = await startServer();
+    const response = await fetch(`${baseUrl}/match-intelligence`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ enabled: true, provider: "sportmonks", cacheSize: 1, snapshotsStored: 1 });
   });
 });

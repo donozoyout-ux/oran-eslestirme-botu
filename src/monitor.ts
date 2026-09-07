@@ -5,6 +5,7 @@ import { rankCouponCandidates, type CouponCandidate } from "./coupon-engine.js";
 import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { errorMessage, logger } from "./logger.js";
 import type { HistoricalOddsArchive, HistoricalPatternDiagnostic } from "./historical-odds-archive.js";
+import { disabledMatchIntelligenceStatus, type MatchIntelligenceService, type MatchIntelligenceStatus } from "./match-intelligence-service.js";
 import { analyzeOddsMarket, type ArbitrageOpportunity, type SelectionConsensus } from "./market-analysis-engine.js";
 import { selectPrematchCloseAlerts } from "./prematch-alert-gate.js";
 import { selectSmartAnalysisAlerts } from "./smart-alert-gate.js";
@@ -126,6 +127,7 @@ export interface MonitorStatus {
     analysis: null;
     message: "Yetersiz tarihsel veri";
   };
+  matchIntelligence: MatchIntelligenceStatus;
   totals: { runs: number; alertsSent: number; errors: number };
 }
 
@@ -143,6 +145,7 @@ export class OddsMonitor {
     private readonly options: MonitorOptions,
     private readonly dailySheet: JsonDailyMatchSheet,
     private readonly historicalArchive?: HistoricalOddsArchive,
+    private readonly matchIntelligence?: MatchIntelligenceService,
   ) {
     this.canonicalMatchResolver = new CanonicalMatchResolver({
       kickoffToleranceMinutes: options.eventKickoffToleranceMinutes,
@@ -177,6 +180,7 @@ export class OddsMonitor {
         analysis: null,
         message: "Yetersiz tarihsel veri",
       },
+      matchIntelligence: disabledMatchIntelligenceStatus(),
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     };
   }
@@ -287,6 +291,17 @@ export class OddsMonitor {
             error: errorMessage(error),
           });
         }
+      }
+
+      if (this.matchIntelligence) {
+        void this.matchIntelligence.refresh(canonicalFixtures, comparisonTime)
+          .then((status) => { this.statusValue.matchIntelligence = status; })
+          .catch((error) => {
+            this.statusValue.totals.errors += 1;
+            this.statusValue.matchIntelligence = { ...this.statusValue.matchIntelligence, enabled: true,
+              lastRunAt: comparisonTime.toISOString(), lastError: errorMessage(error) };
+            logger.warn("Match Intelligence alt sistemi hata verdi; odds monitor devam ediyor.", { error: errorMessage(error) });
+          });
       }
 
       try {

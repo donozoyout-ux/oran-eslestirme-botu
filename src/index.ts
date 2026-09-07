@@ -15,6 +15,9 @@ import { HistoricalOddsArchive } from "./historical-odds-archive.js";
 import { HistoricalOddsPatternEngine } from "./historical-odds-pattern-engine.js";
 import { createHistoricalRepository } from "./historical-repository-factory.js";
 import { OddsMonitor } from "./monitor.js";
+import { MatchIntelligenceService } from "./match-intelligence-service.js";
+import { MemoryMatchIntelligenceSnapshotRepository, PostgresMatchIntelligenceSnapshotRepository,
+  type MatchIntelligenceSnapshotRepository } from "./match-intelligence-repository.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
 import { createProvider } from "./providers/index.js";
 import { SportmonksProvider } from "./providers/sportmonks-provider.js";
@@ -23,6 +26,7 @@ import { ResultsTracker } from "./results-tracker.js";
 import { createServer } from "./server.js";
 import { sendTelegramStartupMessage } from "./telegram-health.js";
 import { SportmonksHistoricalBackfill } from "./sportmonks-historical-backfill.js";
+import { SportmonksMatchIntelligenceProvider } from "./sportmonks-match-intelligence-provider.js";
 
 // Railway gibi platformlarda Start Command bazen package.json'daki bootstrap'i
 // atlayip dogrudan dist/index.js calistirabiliyor. OAuth duzeltmesini burada da
@@ -76,6 +80,18 @@ try {
   const historicalArchive = config.historicalArchiveEnabled ? new HistoricalOddsArchive(historicalRepository, historicalEngine, {
     maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
   }) : undefined;
+  const matchIntelligenceRepository: MatchIntelligenceSnapshotRepository = config.databaseUrl && config.historicalStorage !== "json"
+    ? new PostgresMatchIntelligenceSnapshotRepository(config.databaseUrl)
+    : new MemoryMatchIntelligenceSnapshotRepository();
+  const matchIntelligence = config.matchIntelligenceEnabled && config.sportmonksToken
+    ? new MatchIntelligenceService(new SportmonksMatchIntelligenceProvider({
+        apiToken: config.sportmonksToken,
+        recentMatches: config.matchIntelligenceRecentMatches,
+      }), matchIntelligenceRepository, {
+        cacheMinutes: config.matchIntelligenceCacheMinutes,
+        minSample: config.matchIntelligenceMinSample,
+      })
+    : undefined;
   const monitor = new OddsMonitor(provider, notifier, alertStore, {
     tolerancePercent: config.tolerancePercent,
     maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
@@ -84,7 +100,7 @@ try {
     prematchAlertMinSources: config.prematchAlertMinSources,
     prematchAlertMinConfidence: config.prematchAlertMinConfidence,
     eventKickoffToleranceMinutes: config.eventKickoffToleranceMinutes,
-  }, dailySheet, historicalArchive);
+  }, dailySheet, historicalArchive, matchIntelligence);
   const server = createServer(monitor, config.adminToken);
 
   server.listen(config.port, "0.0.0.0", () => {
@@ -105,6 +121,7 @@ try {
       historicalOddsEnabled: true,
       historicalStorage: historicalRepository.storage,
       historicalMinSampleSize: config.historicalMinSampleSize,
+      matchIntelligenceEnabled: Boolean(matchIntelligence),
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });
@@ -146,13 +163,13 @@ try {
     monitor.stop();
     server.close(() => {
       if (!provider.close) {
-        void historicalRepository.close?.().finally(() => process.exit(0));
+        void Promise.all([historicalRepository.close?.(), matchIntelligenceRepository.close?.()]).finally(() => process.exit(0));
         return;
       }
       void provider
         .close()
         .catch((error) => logger.warn("Saglayici kapatilamadi.", { error: errorMessage(error) }))
-        .finally(() => void historicalRepository.close?.().finally(() => process.exit(0)));
+        .finally(() => void Promise.all([historicalRepository.close?.(), matchIntelligenceRepository.close?.()]).finally(() => process.exit(0)));
     });
     setTimeout(() => process.exit(1), 10_000).unref();
   };

@@ -223,6 +223,10 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `HISTORICAL_PRICE_TOLERANCE_PERCENT` | `10` | Closing fiyat benzerligi icin yuzde bandi |
 | `HISTORICAL_LINE_TOLERANCE` | `0.5` | Asian Handicap ve Total Goals line toleransi |
 | `HISTORICAL_RECENCY_HALF_LIFE_DAYS` | `730` | Recency agirliginin yariya indigi gun sayisi |
+| `MATCH_INTELLIGENCE_ENABLED` | `true` | SportMonks read-only Match Intelligence alt sistemini acar |
+| `MATCH_INTELLIGENCE_RECENT_MATCHES` | `10` | Takim basina alinacak son mac ust siniri |
+| `MATCH_INTELLIGENCE_CACHE_MINUTES` | `45` | Ayni canonical mac icin prematch intelligence cache suresi |
+| `MATCH_INTELLIGENCE_MIN_SAMPLE` | `5` | Tam data availability ve league baseline icin minimum orneklem |
 | `GOOGLE_SHEETS_SPREADSHEET_ID` | bos | Otomatik yazilacak Google Sheet kimligi veya tam baglantisi |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | bos | Sheet'e Duzenleyici verilen servis hesabi e-postasi |
 | `GOOGLE_PRIVATE_KEY` | bos | Servis hesabi RSA ozel anahtari; yalnizca gizli ortam degiskeni |
@@ -291,6 +295,24 @@ sayilarini ayri verir. Abonelikte dogrulanmis bir
 odds-history endpoint'i yoksa sonuc acikca `odds_history_unavailable` olur ve
 closing odds uydurulmaz. Migration elle `npm run db:migrate` ile de tekrar guvenle
 calistirilabilir.
+
+## Match Intelligence
+
+V1-D Match Intelligence, prematch maclar icin SportMonks takim ve mac verilerinden
+read-only bir veri ozeti uretir. Son 5/10 form, home/away split, gercek gol event
+dakikalarindan timing, erisilebilen fixture statistics ve ayni lig/season verisinden
+strength normalization hesaplanir. xG, lineup, injury veya statistics endpoint'i
+pakette yoksa ilgili capability `unavailable` olur; gol sayisindan sahte xG ya da
+eksik feature icin sifir uretilmez.
+
+Her snapshot target kickoff'u kesin cutoff kabul eder; target mac, kickoff sonrasi
+fikstur ve gelecekte gozlenmis event/stat verisi girdiye alinmaz. Sonuc canonical
+event bazinda 45 dakika cache'lenir. PostgreSQL kullaniliyorsa idempotent
+`match_intelligence_snapshots` tablosuna kaydedilir ve historical odds tablolarina
+karistirilmaz. `/match-intelligence` ve `/status` read-only sonucu/capability/rate
+limit diagnostigini sunar. Data confidence yalniz veri kalitesi ve kapsamini ifade
+eder; outcome probability, PLAY/WATCH/PASS veya bahis tavsiyesi degildir. Alt sistem
+hata verirse odds monitor, Telegram ve historical archive calismaya devam eder.
 
 ## Yeni GitHub reposu
 
