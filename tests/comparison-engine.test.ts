@@ -110,4 +110,29 @@ describe("comparison engine", () => {
     expect(eventKey(quote())).toBe(eventKey(quote({ homeTeam: "Fenerbahçe" })));
     expect(marketSignature(quote())).not.toBe(marketSignature(quote({ line: 3.5 })));
   });
+
+  it("fiyat degisikliginde alert kimligini degistirmez", () => {
+    const first = findOddsMatches(
+      [quote({ price: 2.1 }), quote({ bookmakerKey: "book-b", price: 2.12 })],
+      { tolerancePercent: 2, maxQuoteAgeSeconds: 300 },
+      now,
+    );
+    const second = findOddsMatches(
+      [quote({ price: 2.11 }), quote({ bookmakerKey: "book-b", price: 2.13 })],
+      { tolerancePercent: 2, maxQuoteAgeSeconds: 300 },
+      now,
+    );
+    expect(second.matches[0]!.id).toBe(first.matches[0]!.id);
+  });
+
+  it("secim, line ve phase degisikliklerinde farkli alert kimligi uretir", () => {
+    const idFor = (overrides: Partial<OddsQuote>) => findOddsMatches(
+      [quote(overrides), quote({ ...overrides, bookmakerKey: "book-b", price: 2.12 })],
+      { tolerancePercent: 2, maxQuoteAgeSeconds: 300 },
+      now,
+    ).matches[0]!.id;
+    expect(idFor({ selectionKey: "over" })).not.toBe(idFor({ selectionKey: "under" }));
+    expect(idFor({ line: 2.5 })).not.toBe(idFor({ line: 3.5 }));
+    expect(idFor({ phase: "prematch" })).not.toBe(idFor({ phase: "live" }));
+  });
 });

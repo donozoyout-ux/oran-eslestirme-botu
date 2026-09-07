@@ -20,6 +20,8 @@ export interface OddsQuote {
   bookmakerKey: string;
   bookmakerName: string;
   sourceEventId: string;
+  /** Providerlar arasi resolver tarafindan atanan, kaynak ID'sinden bagimsiz mac kimligi. */
+  canonicalEventId?: string;
   sportKey: string;
   leagueName: string;
   homeTeam: string;
@@ -42,6 +44,7 @@ export type FixtureResultStatus = "scheduled" | "live" | "finished" | "cancelled
 export interface MatchFixture {
   provider: string;
   sourceEventId: string;
+  canonicalEventId?: string;
   leagueName: string;
   homeTeam: string;
   awayTeam: string;
@@ -101,8 +104,23 @@ export interface Notifier {
 }
 
 export interface AlertStore {
-  shouldSend(alertId: string, now: Date): boolean;
-  markSent(alertId: string, now: Date): Promise<void>;
+  shouldSend(alertId: string, now: Date, state?: AlertSignalState): boolean;
+  markSent(alertId: string, now: Date, state?: AlertSignalState): Promise<void>;
+}
+
+export interface AlertMetricThreshold {
+  absolute?: number;
+  relativePercent?: number;
+}
+
+/**
+ * Alert ID'sini degistirmeden, ayni sinyalin gercekten yeni bir duruma gecip
+ * gecmedigini olcmek icin saklanan kucuk durum ozeti.
+ */
+export interface AlertSignalState {
+  stateKey: string;
+  metrics: Record<string, number>;
+  thresholds: Record<string, AlertMetricThreshold>;
 }
 
 export interface RunSummary {

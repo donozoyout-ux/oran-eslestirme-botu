@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { OddsMatch } from "./domain.js";
 import type { SelectionConsensus } from "./market-analysis-engine.js";
 
@@ -27,10 +26,6 @@ function minutesUntilKickoff(match: OddsMatch, now: Date): number {
   const kickoff = Date.parse(match.quoteA.commenceTime);
   if (!Number.isFinite(kickoff)) return Number.POSITIVE_INFINITY;
   return (kickoff - now.getTime()) / 60_000;
-}
-
-function stableEventAlertId(match: OddsMatch): string {
-  return `prematch-close:${createHash("sha256").update(match.eventKey).digest("hex").slice(0, 20)}`;
 }
 
 function rowFairOdds(row: SelectionConsensus): number {
@@ -76,7 +71,9 @@ export function selectPrematchCloseAlerts(
     if (!Number.isFinite(value) || value < minValuePercent) continue;
 
     const candidate = {
-      match: { ...match, id: stableEventAlertId(match) },
+      // comparison-engine kimligi event + market + selection + line + phase
+      // tabanlidir; burada mac seviyesine indirgemek farkli secimleri ezerdi.
+      match,
       confidence: row.confidenceScore,
       dispersion: row.dispersionPercent,
       value,

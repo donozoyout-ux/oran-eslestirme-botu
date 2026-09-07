@@ -205,6 +205,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `MAX_QUOTE_AGE_SECONDS` | `300` | Bayat veri esigi |
 | `MAX_LIVE_EVENT_AGE_MINUTES` | `180` | Baslangictan sonra canli sayilacak azami sure |
 | `ALERT_COOLDOWN_SECONDS` | `600` | Ayni eslesme icin tekrar bekleme suresi |
+| `EVENT_KICKOFF_TOLERANCE_MINUTES` | `10` | Providerlar arasi mac baslangic saati toleransi |
 | `SURPRISE_ODDS_THRESHOLD` | `2.5` | Iki yakin oranin ortalamasi bu degere ulasirsa surpriz adayi etiketi |
 | `ODDS_MOVEMENT_THRESHOLD_PERCENT` | `8` | Acilis oranina gore analiz sinyali uretecek degisim |
 | `DRY_RUN` | `true` | Telegram yerine terminale yazar |

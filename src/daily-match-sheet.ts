@@ -7,6 +7,7 @@ export interface OddsHistoryEntry {
   capturedAt: string;
   provider: string;
   sourceEventId: string;
+  canonicalEventId?: string;
   event: string;
   phase: "prematch" | "live";
   marketKey: string;
@@ -81,9 +82,9 @@ function istanbulDayKey(date: Date): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-function quoteKey(quote: Pick<OddsQuote, "sourceEventId" | "bookmakerKey" | "marketKey" | "period" | "selectionKey" | "line">): string {
+function quoteKey(quote: Pick<OddsQuote, "sourceEventId" | "canonicalEventId" | "bookmakerKey" | "marketKey" | "period" | "selectionKey" | "line">): string {
   return [
-    quote.sourceEventId,
+    quote.canonicalEventId ?? quote.sourceEventId,
     quote.bookmakerKey,
     quote.marketKey,
     quote.period,
@@ -218,7 +219,7 @@ export class JsonDailyMatchSheet {
     for (const entry of this.state.oddsHistory) {
       rows.push([
         entry.capturedAt,
-        entry.sourceEventId,
+        entry.canonicalEventId ?? entry.sourceEventId,
         entry.event,
         entry.phase,
         entry.market,
@@ -255,6 +256,7 @@ export class JsonDailyMatchSheet {
         ...existing,
         provider: quote.provider,
         sourceEventId: quote.sourceEventId,
+        ...(quote.canonicalEventId ? { canonicalEventId: quote.canonicalEventId } : {}),
         leagueName: quote.leagueName,
         homeTeam: quote.homeTeam,
         awayTeam: quote.awayTeam,
@@ -270,7 +272,7 @@ export class JsonDailyMatchSheet {
     const openingByKey = new Map<string, OddsHistoryEntry>();
     for (const entry of this.state.oddsHistory) {
       const key = [
-        entry.sourceEventId,
+        entry.canonicalEventId ?? entry.sourceEventId,
         entry.bookmakerKey,
         entry.marketKey,
         entry.period,
@@ -286,6 +288,7 @@ export class JsonDailyMatchSheet {
         capturedAt: now.toISOString(),
         provider: quote.provider,
         sourceEventId: quote.sourceEventId,
+        ...(quote.canonicalEventId ? { canonicalEventId: quote.canonicalEventId } : {}),
         event: `${quote.homeTeam} - ${quote.awayTeam}`,
         phase: quote.phase,
         marketKey: quote.marketKey,
@@ -324,7 +327,9 @@ export class JsonDailyMatchSheet {
         openingPrice: opening.price,
         currentPrice: entry.price,
         changePercent,
-        notifiedAt: existingSignal?.notifiedAt,
+        notifiedAt: existingSignal && this.isMeaningfulMovementChange(existingSignal, quote.price, changePercent)
+          ? undefined
+          : existingSignal?.notifiedAt,
       };
       signals.set(signalId, movementSignal);
     }
@@ -332,6 +337,20 @@ export class JsonDailyMatchSheet {
       this.state.oddsHistory = this.state.oddsHistory.slice(-this.maxHistoryEntries);
     }
     this.state.signals = [...signals.values()].slice(-1_000);
+  }
+
+  private isMeaningfulMovementChange(
+    previous: OddsAnalysisSignal,
+    currentPrice: number,
+    currentChangePercent: number,
+  ): boolean {
+    const priceChange = previous.currentPrice && previous.currentPrice > 0
+      ? Math.abs((currentPrice - previous.currentPrice) / previous.currentPrice) * 100
+      : 0;
+    const signalChange = previous.changePercent === undefined
+      ? 0
+      : Math.abs(currentChangePercent - previous.changePercent);
+    return priceChange >= 3 || signalChange >= 2;
   }
 
   private recordMatches(matches: OddsMatch[]): void {

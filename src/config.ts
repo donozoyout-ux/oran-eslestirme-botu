@@ -43,6 +43,7 @@ export interface AppConfig {
   maxQuoteAgeSeconds: number;
   maxLiveEventAgeMinutes: number;
   alertCooldownSeconds: number;
+  eventKickoffToleranceMinutes: number;
   surpriseOddsThreshold: number;
   oddsMovementThresholdPercent: number;
   telegramBotToken?: string;
@@ -144,6 +145,7 @@ export function loadConfig(): AppConfig {
     maxQuoteAgeSeconds: numberValue("MAX_QUOTE_AGE_SECONDS", 300, { min: 1, max: 86_400 }),
     maxLiveEventAgeMinutes: numberValue("MAX_LIVE_EVENT_AGE_MINUTES", 180, { min: 1, max: 600 }),
     alertCooldownSeconds: numberValue("ALERT_COOLDOWN_SECONDS", 600, { min: 0, max: 604_800 }),
+    eventKickoffToleranceMinutes: numberValue("EVENT_KICKOFF_TOLERANCE_MINUTES", 10, { min: 0, max: 60 }),
     surpriseOddsThreshold: numberValue("SURPRISE_ODDS_THRESHOLD", 2.5, { min: 1.01, max: 1_000 }),
     oddsMovementThresholdPercent: numberValue("ODDS_MOVEMENT_THRESHOLD_PERCENT", 8, { min: 0.1, max: 100 }),
     telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),

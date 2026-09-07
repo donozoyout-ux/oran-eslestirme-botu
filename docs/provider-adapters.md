@@ -2,6 +2,12 @@
 
 Her izinli veri kaynagi `OddsProvider` arayuzunu uygular ve ham veriyi `OddsQuote[]` bicimine donusturur. Karsilastirma motoru kaynaga ozel JSON bilmez.
 
+Karsilastirma oncesinde `CanonicalMatchResolver`, kaynak event ID'sini provider ile
+birlikte dogrudan bag olarak kullanir. Farkli provider ID'leri arasinda takim
+alias'lari, normalize lig adi ve `EVENT_KICKOFF_TOLERANCE_MINUTES` penceresiyle
+esleme yapar. Resolver'in atadigi `canonicalEventId` adaptorlerin ham
+`sourceEventId` degerini degistirmez; izlenebilirlik icin ikisi birlikte korunur.
+
 ## Zorunlu alanlar
 
 | Alan | Kural |

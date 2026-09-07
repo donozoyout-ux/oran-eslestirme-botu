@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { CanonicalMatchResolver } from "./canonical-match-resolver.js";
 import type { OddsMatch, OddsQuote } from "./domain.js";
 
 export interface ComparisonOptions {
   tolerancePercent: number;
   maxQuoteAgeSeconds: number;
+  canonicalMatchResolver?: CanonicalMatchResolver;
 }
 
 export interface ComparisonResult {
@@ -31,6 +33,7 @@ function kickoffBucket(isoTime: string): string {
 }
 
 export function eventKey(quote: OddsQuote): string {
+  if (quote.canonicalEventId) return `${quote.canonicalEventId}|${quote.phase}`;
   return [
     normalizeName(quote.homeTeam),
     normalizeName(quote.awayTeam),
@@ -61,14 +64,10 @@ function isFresh(quote: OddsQuote, now: Date, maxAgeSeconds: number): boolean {
   return ageMs <= maxAgeSeconds * 1000 && ageMs >= -60_000;
 }
 
-function stableAlertId(event: string, market: string, quoteA: OddsQuote, quoteB: OddsQuote): string {
-  // Ayni mac/pazar ve ayni fiyat cifti tek alarmdir. Oranlardan biri gercekten
-  // degistiginde yeni ID olusur ve yeni Telegram bildirimi gonderilebilir.
-  const prices = [
-    `${quoteA.bookmakerKey}:${quoteA.price.toFixed(3)}`,
-    `${quoteB.bookmakerKey}:${quoteB.price.toFixed(3)}`,
-  ].sort();
-  return createHash("sha256").update(`${event}|${market}|${prices.join("|")}`).digest("hex").slice(0, 24);
+function stableAlertId(event: string, market: string): string {
+  // Fiyat kimligin parcasi degildir. Market signature secim ve cizgiyi,
+  // event key ise canonical mac ve fazi zaten icerir.
+  return `close:${createHash("sha256").update(`${event}|${market}`).digest("hex").slice(0, 24)}`;
 }
 
 export function findOddsMatches(
@@ -76,7 +75,10 @@ export function findOddsMatches(
   options: ComparisonOptions,
   now = new Date(),
 ): ComparisonResult {
-  const freshQuotes = quotes.filter((quote) => isFresh(quote, now, options.maxQuoteAgeSeconds));
+  const resolver = options.canonicalMatchResolver ?? new CanonicalMatchResolver();
+  const freshQuotes = resolver
+    .resolveQuotes(quotes)
+    .filter((quote) => isFresh(quote, now, options.maxQuoteAgeSeconds));
   const grouped = new Map<string, Map<string, OddsQuote>>();
 
   for (const quote of freshQuotes) {
@@ -110,7 +112,7 @@ export function findOddsMatches(
     const event = eventKey(bestPair.quoteA);
     const market = marketSignature(bestPair.quoteA);
     matches.push({
-      id: stableAlertId(event, market, bestPair.quoteA, bestPair.quoteB),
+      id: stableAlertId(event, market),
       eventKey: event,
       marketSignature: market,
       phase: bestPair.quoteA.phase,

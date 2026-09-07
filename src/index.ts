@@ -68,6 +68,7 @@ try {
     prematchAlertWindowMinutes: config.prematchAlertWindowMinutes,
     prematchAlertMinSources: config.prematchAlertMinSources,
     prematchAlertMinConfidence: config.prematchAlertMinConfidence,
+    eventKickoffToleranceMinutes: config.eventKickoffToleranceMinutes,
   }, dailySheet);
   const server = createServer(monitor, config.adminToken);
 
@@ -81,6 +82,7 @@ try {
       prematchAlertWindowMinutes: config.prematchAlertWindowMinutes,
       prematchAlertMinSources: config.prematchAlertMinSources,
       prematchAlertMinConfidence: config.prematchAlertMinConfidence,
+      eventKickoffToleranceMinutes: config.eventKickoffToleranceMinutes,
       surpriseOddsThreshold: config.surpriseOddsThreshold,
       googleSheetsEnabled,
       googleSheetsSyncMinutes: config.googleSheetsSyncMinutes,

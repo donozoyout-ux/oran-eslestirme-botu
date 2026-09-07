@@ -68,4 +68,18 @@ describe("analyzeOddsMarket", () => {
     expect(result.arbitrage[0]!.legs).toHaveLength(3);
     expect(result.alertSignals.some((signal) => signal.type === "arbitrage")).toBe(true);
   });
+
+  it("arbitraj alert kimligini fiyat degisimlerinden bagimsiz tutar", () => {
+    const first = analyzeOddsMarket([
+      quote("a", "home", 2.4), quote("a", "draw", 3.1), quote("a", "away", 3.1),
+      quote("b", "home", 2.0), quote("b", "draw", 3.8), quote("b", "away", 3.1),
+      quote("c", "home", 2.0), quote("c", "draw", 3.1), quote("c", "away", 4.0),
+    ], { minArbitrageMarginPercent: 0.1 }, now);
+    const second = analyzeOddsMarket([
+      quote("a", "home", 2.45), quote("a", "draw", 3.1), quote("a", "away", 3.1),
+      quote("b", "home", 2.0), quote("b", "draw", 3.85), quote("b", "away", 3.1),
+      quote("c", "home", 2.0), quote("c", "draw", 3.1), quote("c", "away", 4.05),
+    ], { minArbitrageMarginPercent: 0.1 }, now);
+    expect(second.arbitrage[0]!.id).toBe(first.arbitrage[0]!.id);
+  });
 });

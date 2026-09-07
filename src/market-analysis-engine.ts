@@ -44,7 +44,9 @@ export function analyzeOddsMarket(quotes:OddsQuote[], options:MarketAnalysisOpti
   }
   const bestBySelection=[...bySelection.values()].map(a=>a.reduce((x,q)=>q.price>x.price?q:x)); const count=bestBySelection.length; if(count<2||(expected!==null&&count<expected)) continue;
   const impliedProbabilitySum=bestBySelection.reduce((s,q)=>s+1/q.price,0), marginPercent=(1-impliedProbabilitySum)*100; if(marginPercent<minArbitrageMargin) continue;
-  const arbKey=[marketGroupKey(sample),...bestBySelection.map(q=>`${q.selectionKey}:${q.bookmakerKey}:${q.price}`)].join("|");
+  // Bookmaker ve fiyatlar firsatin state'idir, kimligi degildir. Kucuk oran
+  // oynamalari ayni arbitraj icin yeni Telegram ID'si uretmemelidir.
+  const arbKey=[marketGroupKey(sample),...bestBySelection.map(q=>q.selectionKey).sort()].join("|");
   const opportunity:ArbitrageOpportunity={id:stableId("arb",arbKey),eventKey:eventKey(sample),event:`${sample.homeTeam} - ${sample.awayTeam}`,phase:sample.phase,marketKey:sample.marketKey,market:sample.marketName,period:sample.period,line:sample.line,impliedProbabilitySum,marginPercent,legs:bestBySelection.map(q=>({selectionKey:q.selectionKey,selection:q.selectionName,bookmaker:q.bookmakerName,price:q.price})),detectedAt:now.toISOString()}; arbitrage.push(opportunity);
   alertSignals.push({id:opportunity.id,type:"arbitrage",event:opportunity.event,market:opportunity.market,selection:opportunity.legs.map(l=>l.selection).join(" / "),line:opportunity.line,detail:`Teorik arbitraj marjı %${marginPercent.toFixed(2)}. ${opportunity.legs.map(l=>`${l.selection}: ${l.bookmaker} ${l.price.toFixed(2)}`).join(" | ")}`,detectedAt:now.toISOString(),confidenceScore:100,arbitrageMarginPercent:marginPercent,sourceCount:new Set(bestBySelection.map(q=>q.bookmakerKey)).size});
  }

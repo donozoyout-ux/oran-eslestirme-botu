@@ -1,4 +1,5 @@
-import type { AlertStore, Notifier, OddsProvider, RunSummary } from "./domain.js";
+import { CanonicalMatchResolver } from "./canonical-match-resolver.js";
+import type { AlertSignalState, AlertStore, Notifier, OddsAnalysisSignal, OddsMatch, OddsProvider, RunSummary } from "./domain.js";
 import { findOddsMatches } from "./comparison-engine.js";
 import { rankCouponCandidates, type CouponCandidate } from "./coupon-engine.js";
 import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-sheet.js";
@@ -14,6 +15,63 @@ export interface MonitorOptions {
   prematchAlertWindowMinutes: number;
   prematchAlertMinSources: number;
   prematchAlertMinConfidence: number;
+  eventKickoffToleranceMinutes?: number;
+}
+
+function matchAlertState(match: OddsMatch): AlertSignalState {
+  const quotes = [match.quoteA, match.quoteB]
+    .sort((a, b) => a.bookmakerKey.localeCompare(b.bookmakerKey) || a.provider.localeCompare(b.provider));
+  const first = quotes[0]!;
+  const second = quotes[1]!;
+  return {
+    // Ayni bookmaker baska bir feed'den gelmeye baslarsa bu yeni ekonomik
+    // sinyal sayilmaz; provider gecisi duplicate bildirim uretmemeli.
+    stateKey: quotes.map((quote) => quote.bookmakerKey).join("|"),
+    metrics: {
+      firstPrice: first.price,
+      secondPrice: second.price,
+      differencePercent: match.relativeDifferencePercent,
+    },
+    thresholds: {
+      firstPrice: { relativePercent: 3 },
+      secondPrice: { relativePercent: 3 },
+      differencePercent: { absolute: 0.5 },
+    },
+  };
+}
+
+function analysisAlertState(signal: OddsAnalysisSignal): AlertSignalState {
+  const metrics: Record<string, number> = {};
+  const thresholds: AlertSignalState["thresholds"] = {};
+  if (signal.currentPrice !== undefined) {
+    metrics.currentPrice = signal.currentPrice;
+    thresholds.currentPrice = { relativePercent: 3 };
+  }
+  if (signal.consensusPrice !== undefined) {
+    metrics.consensusPrice = signal.consensusPrice;
+    thresholds.consensusPrice = { relativePercent: 3 };
+  }
+  if (signal.changePercent !== undefined) {
+    metrics.changePercent = signal.changePercent;
+    thresholds.changePercent = { absolute: 2 };
+  }
+  if (signal.arbitrageMarginPercent !== undefined) {
+    metrics.arbitrageMarginPercent = signal.arbitrageMarginPercent;
+    thresholds.arbitrageMarginPercent = { absolute: 0.5 };
+  }
+  if (signal.confidenceScore !== undefined) {
+    metrics.confidenceScore = signal.confidenceScore;
+    thresholds.confidenceScore = { absolute: 10 };
+  }
+  if (signal.sourceCount !== undefined) {
+    metrics.sourceCount = signal.sourceCount;
+    thresholds.sourceCount = { absolute: 1 };
+  }
+  return {
+    stateKey: [signal.type, signal.bookmaker ?? "market", signal.selection, signal.line ?? "none"].join("|"),
+    metrics,
+    thresholds,
+  };
 }
 
 export interface MonitorStatus {
@@ -61,6 +119,7 @@ export class OddsMonitor {
   private scheduler: NodeJS.Timeout | null = null;
   private stopped = false;
   private readonly statusValue: MonitorStatus;
+  private readonly canonicalMatchResolver: CanonicalMatchResolver;
 
   constructor(
     private readonly provider: OddsProvider,
@@ -69,6 +128,9 @@ export class OddsMonitor {
     private readonly options: MonitorOptions,
     private readonly dailySheet: JsonDailyMatchSheet,
   ) {
+    this.canonicalMatchResolver = new CanonicalMatchResolver({
+      kickoffToleranceMinutes: options.eventKickoffToleranceMinutes,
+    });
     this.statusValue = {
       provider: provider.name,
       notifier: notifier.name,
@@ -144,6 +206,7 @@ export class OddsMonitor {
         {
           tolerancePercent: this.options.tolerancePercent,
           maxQuoteAgeSeconds: this.options.maxQuoteAgeSeconds,
+          canonicalMatchResolver: this.canonicalMatchResolver,
         },
         comparisonTime,
       );
@@ -174,7 +237,7 @@ export class OddsMonitor {
 
       try {
         const sheetResult = await this.dailySheet.record(
-          this.provider.getLastFixtures?.() ?? [],
+          this.canonicalMatchResolver.resolveFixtures(this.provider.getLastFixtures?.() ?? []),
           comparison.freshQuotes,
           comparison.matches,
           comparisonTime,
@@ -189,9 +252,16 @@ export class OddsMonitor {
           alertsSuppressed += sheetResult.pendingMovementSignals.length - smartMovementSignals.length;
 
           for (const signal of smartMovementSignals) {
+            const now = new Date();
+            const alertState = analysisAlertState(signal);
+            if (!this.alertStore.shouldSend(signal.id, now, alertState)) {
+              alertsSuppressed += 1;
+              continue;
+            }
             try {
               await this.notifier.sendAnalysisSignal(signal);
-              await this.dailySheet.markSignalNotified(signal.id, new Date());
+              await this.alertStore.markSent(signal.id, now, alertState);
+              await this.dailySheet.markSignalNotified(signal.id, now);
               alertsSent += 1;
               movementAlertsSent += 1;
             } catch (error) {
@@ -217,13 +287,14 @@ export class OddsMonitor {
 
         for (const signal of smartMarketSignals) {
           const now = new Date();
-          if (!this.alertStore.shouldSend(signal.id, now)) {
+          const alertState = analysisAlertState(signal);
+          if (!this.alertStore.shouldSend(signal.id, now, alertState)) {
             alertsSuppressed += 1;
             continue;
           }
           try {
             await this.notifier.sendAnalysisSignal(signal);
-            await this.alertStore.markSent(signal.id, now);
+            await this.alertStore.markSent(signal.id, now, alertState);
             alertsSent += 1;
             marketAnalysisAlertsSent += 1;
           } catch (error) {
@@ -240,13 +311,14 @@ export class OddsMonitor {
       // value de tasiyorsa gider. Dusuk oran tek basina bildirim sebebi degildir.
       for (const match of prematchCloseAlerts) {
         const now = new Date();
-        if (!this.alertStore.shouldSend(match.id, now)) {
+        const alertState = matchAlertState(match);
+        if (!this.alertStore.shouldSend(match.id, now, alertState)) {
           alertsSuppressed += 1;
           continue;
         }
         try {
           await this.notifier.send(match);
-          await this.alertStore.markSent(match.id, now);
+          await this.alertStore.markSent(match.id, now, alertState);
           alertsSent += 1;
         } catch (error) {
           this.statusValue.totals.errors += 1;
@@ -317,7 +389,12 @@ export class OddsMonitor {
 
       try {
         const cleanupTime = new Date();
-        await this.dailySheet.record(this.provider.getLastFixtures?.() ?? [], [], [], cleanupTime);
+        await this.dailySheet.record(
+          this.canonicalMatchResolver.resolveFixtures(this.provider.getLastFixtures?.() ?? []),
+          [],
+          [],
+          cleanupTime,
+        );
         this.statusValue.dailySheet = this.dailySheet.getSnapshot();
         logger.warn("Veri kaynagi hatasina ragmen Google Sheet/yerel tablo temizleme turu calistirildi.", {
           fixtures: this.statusValue.dailySheet.fixtures.length,
