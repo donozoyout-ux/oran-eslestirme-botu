@@ -4,6 +4,7 @@ import { findOddsMatches } from "./comparison-engine.js";
 import { rankCouponCandidates, type CouponCandidate } from "./coupon-engine.js";
 import type { DailySheetSnapshot, JsonDailyMatchSheet } from "./daily-match-sheet.js";
 import { errorMessage, logger } from "./logger.js";
+import type { HistoricalOddsArchive, HistoricalPatternDiagnostic } from "./historical-odds-archive.js";
 import { analyzeOddsMarket, type ArbitrageOpportunity, type SelectionConsensus } from "./market-analysis-engine.js";
 import { selectPrematchCloseAlerts } from "./prematch-alert-gate.js";
 import { selectSmartAnalysisAlerts } from "./smart-alert-gate.js";
@@ -111,6 +112,20 @@ export interface MonitorStatus {
   marketAnalysis: { consensus: SelectionConsensus[]; arbitrage: ArbitrageOpportunity[] };
   couponCandidates: CouponCandidate[];
   dailySheet: DailySheetSnapshot;
+  historicalPattern: HistoricalPatternDiagnostic | {
+    enabled: false;
+    storage: "memory" | "json" | "postgres";
+    completedFixtures: 0;
+    oddsSnapshots: 0;
+    oldestEvent: null;
+    newestEvent: null;
+    lastArchiveWrite: null;
+    health: "ok" | "error";
+    lastError: string | null;
+    completeness: { totalEvents: 0; withResults: 0; withClosingOdds: 0; withAhAndOuClosing: 0; patternEligible: 0 };
+    analysis: null;
+    message: "Yetersiz tarihsel veri";
+  };
   totals: { runs: number; alertsSent: number; errors: number };
 }
 
@@ -127,6 +142,7 @@ export class OddsMonitor {
     private readonly alertStore: AlertStore,
     private readonly options: MonitorOptions,
     private readonly dailySheet: JsonDailyMatchSheet,
+    private readonly historicalArchive?: HistoricalOddsArchive,
   ) {
     this.canonicalMatchResolver = new CanonicalMatchResolver({
       kickoffToleranceMinutes: options.eventKickoffToleranceMinutes,
@@ -147,6 +163,20 @@ export class OddsMonitor {
       marketAnalysis: { consensus: [], arbitrage: [] },
       couponCandidates: [],
       dailySheet: dailySheet.getSnapshot(),
+      historicalPattern: {
+        enabled: false,
+        storage: "memory",
+        completedFixtures: 0,
+        oddsSnapshots: 0,
+        oldestEvent: null,
+        newestEvent: null,
+        lastArchiveWrite: null,
+        health: "ok",
+        lastError: null,
+        completeness: { totalEvents: 0, withResults: 0, withClosingOdds: 0, withAhAndOuClosing: 0, patternEligible: 0 },
+        analysis: null,
+        message: "Yetersiz tarihsel veri",
+      },
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     };
   }
@@ -210,6 +240,9 @@ export class OddsMonitor {
         },
         comparisonTime,
       );
+      const canonicalFixtures = this.canonicalMatchResolver.resolveFixtures(
+        this.provider.getLastFixtures?.() ?? [],
+      );
       const marketAnalysis = analyzeOddsMarket(comparison.freshQuotes, {}, comparisonTime);
       const prematchCloseAlerts = selectPrematchCloseAlerts(
         comparison.matches,
@@ -235,9 +268,30 @@ export class OddsMonitor {
       let marketAnalysisAlertsSent = 0;
       let alertsSuppressed = 0;
 
+      if (this.historicalArchive) {
+        try {
+          await this.historicalArchive.record(comparison.freshQuotes, canonicalFixtures, comparisonTime);
+          this.statusValue.historicalPattern = await this.historicalArchive.diagnostics(
+            comparison.freshQuotes,
+            comparisonTime,
+          );
+        } catch (error) {
+          this.statusValue.totals.errors += 1;
+          this.statusValue.historicalPattern = {
+            ...this.statusValue.historicalPattern,
+            storage: this.historicalArchive.storage,
+            health: "error",
+            lastError: errorMessage(error),
+          };
+          logger.warn("Historical odds arsivi guncellenemedi; ana monitor devam ediyor.", {
+            error: errorMessage(error),
+          });
+        }
+      }
+
       try {
         const sheetResult = await this.dailySheet.record(
-          this.canonicalMatchResolver.resolveFixtures(this.provider.getLastFixtures?.() ?? []),
+          canonicalFixtures,
           comparison.freshQuotes,
           comparison.matches,
           comparisonTime,

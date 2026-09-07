@@ -69,6 +69,11 @@ export function createServer(monitor: OddsMonitor, adminToken?: string): http.Se
       return;
     }
 
+    if (method === "GET" && url.pathname === "/historical-pattern") {
+      sendJson(response, 200, monitor.getStatus().historicalPattern);
+      return;
+    }
+
     if (method === "GET" && url.pathname === "/daily-matches.csv") {
       sendCsv(response, "gunun-maclari.csv", monitor.getDailyFixturesCsv());
       return;

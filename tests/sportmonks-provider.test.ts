@@ -156,4 +156,11 @@ describe("SportmonksProvider", () => {
     expect(pages).toEqual(["1", "2"]);
     expect(provider.getLastFixtures()).toHaveLength(2);
   });
+
+  it("premium odds history yetkisi yoksa kontrollu capability sonucu doner", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({message:"subscription required"}),{status:403})));
+    const provider = new SportmonksProvider(commonOptions);
+    const result = await provider.fetchHistoricalOdds([]);
+    expect(result).toEqual({capability:"odds_history_unavailable",quotes:[]});
+  });
 });

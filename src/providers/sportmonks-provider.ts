@@ -61,6 +61,13 @@ interface SportmonksOdd {
   market?: { id?: number; name?: string; developer_name?: string };
 }
 
+interface SportmonksHistoricalOdd {
+  id?: number;
+  value?: string | number;
+  bookmaker_update?: string;
+  odd?: SportmonksOdd;
+}
+
 interface SportmonksFixture {
   id?: number;
   league_id?: number;
@@ -91,6 +98,16 @@ export interface SportmonksProviderOptions {
   includeOdds?: boolean;
   baseUrl?: string;
   requestTimeoutMs?: number;
+}
+
+export interface SportmonksHistoricalDay {
+  fixtures: MatchFixture[];
+  oddsHistoryCapability: "odds_history_unavailable";
+}
+
+export interface SportmonksHistoricalOddsResult {
+  capability: "available" | "odds_history_unavailable";
+  quotes: OddsQuote[];
 }
 
 class SportmonksHttpError extends Error {
@@ -201,6 +218,20 @@ function currentScore(
   });
   const current = candidates.find((score) => canonical(score.description ?? "") === "current") ?? candidates.at(-1);
   return typeof current?.score?.goals === "number" ? current.score.goals : undefined;
+}
+
+function halftimeScore(
+  scores: SportmonksScore[] | undefined,
+  side: "home" | "away",
+  participantId: number | undefined,
+): number | undefined {
+  const halftimeDescriptions = new Set(["1st_half", "first_half", "1h", "half_time", "halftime"]);
+  const score = (scores ?? []).find((candidate) => {
+    const scoreSide = canonical(candidate.score?.participant ?? "");
+    const correctSide = scoreSide === side || (participantId !== undefined && candidate.participant_id === participantId);
+    return correctSide && halftimeDescriptions.has(canonical(candidate.description ?? ""));
+  });
+  return typeof score?.score?.goals === "number" ? score.score.goals : undefined;
 }
 
 function periodFromMarket(name: string): PeriodKey {
@@ -342,6 +373,53 @@ export class SportmonksProvider implements OddsProvider {
     return [...this.lastFixtures];
   }
 
+  async fetchHistoricalDay(date: string, signal?: AbortSignal): Promise<SportmonksHistoricalDay> {
+    const raw = await this.fetchFixtures(date, false, signal);
+    const reference = new Date(`${date}T23:59:59+03:00`);
+    return {
+      fixtures: raw.map((fixture) => this.mapFixture(fixture, reference)).filter((fixture): fixture is MatchFixture => fixture !== null),
+      // Fixture endpoint'inin odds iliskisi degisim gecmisi degildir. History
+      // endpoint yetkisi dogrulanmadan bu degerlerden sahte closing uretilmez.
+      oddsHistoryCapability: "odds_history_unavailable",
+    };
+  }
+
+  async fetchHistoricalOdds(fixtures: MatchFixture[], signal?: AbortSignal): Promise<SportmonksHistoricalOddsResult> {
+    const fixtureById = new Map(fixtures.map((fixture) => [fixture.sourceEventId, fixture]));
+    const rows: SportmonksHistoricalOdd[] = [];
+    try {
+      for (let page = 1; page <= this.options.maxPages; page += 1) {
+        const url = new URL(`${this.baseUrl}/odds/premium/history`);
+        url.searchParams.set("include", "odd"); url.searchParams.set("per_page", "50"); url.searchParams.set("page", String(page));
+        const timeout = AbortSignal.timeout(this.requestTimeoutMs);
+        const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+        const response = await fetch(url,{headers:{Authorization:this.options.apiToken,accept:"application/json"},signal:requestSignal});
+        const text = await response.text();
+        if (!response.ok) throw new SportmonksHttpError(response.status,text);
+        const parsed = JSON.parse(text) as SportmonksEnvelope<SportmonksHistoricalOdd>;
+        rows.push(...(parsed.data ?? []));
+        this.remainingRequests = typeof parsed.rate_limit?.remaining === "number" ? parsed.rate_limit.remaining : this.remainingRequests;
+        this.resetSeconds = typeof parsed.rate_limit?.resets_in_seconds === "number" ? parsed.rate_limit.resets_in_seconds : this.resetSeconds;
+        if (!parsed.pagination?.has_more || this.remainingRequests === 0) break;
+      }
+    } catch (error) {
+      if (error instanceof SportmonksHttpError && [400,401,403,404].includes(error.status)) {
+        return {capability:"odds_history_unavailable",quotes:[]};
+      }
+      throw error;
+    }
+    const quotes: OddsQuote[]=[];
+    for(const row of rows){const odd=row.odd; if(!odd)continue; const fixture=fixtureById.get(String(odd.fixture_id)); if(!fixture)continue;
+      const price=Number(row.value); const updatedAt=Date.parse(row.bookmaker_update ?? ""); if(!Number.isFinite(price)||price<=1||!Number.isFinite(updatedAt))continue;
+      const bookmakerName=odd.bookmaker?.name?.trim() ?? `Sportmonks Bookmaker ${odd.bookmaker_id ?? "Unknown"}`;
+      const market=marketFromOdd(odd); const selection=selectionFor(odd,market.key,fixture.homeTeam,fixture.awayTeam);
+      quotes.push({provider:this.name,bookmakerKey:bookmakerKey(bookmakerName,odd.bookmaker_id),bookmakerName,sourceEventId:fixture.sourceEventId,
+        sportKey:"soccer",leagueName:fixture.leagueName,homeTeam:fixture.homeTeam,awayTeam:fixture.awayTeam,commenceTime:fixture.commenceTime,
+        phase:"prematch",marketKey:market.key,marketName:market.name,period:periodFromMarket(market.name),selectionKey:selection.key,
+        selectionName:selection.name,line:selection.line,price,updatedAt:new Date(updatedAt).toISOString()}); }
+    return {capability:"available",quotes};
+  }
+
   private async fetchFixtures(date: string, includeOdds: boolean, signal?: AbortSignal): Promise<SportmonksFixture[]> {
     const all: SportmonksFixture[] = [];
     for (let page = 1; page <= this.options.maxPages; page += 1) {
@@ -412,6 +490,8 @@ export class SportmonksProvider implements OddsProvider {
 
     const homeScore = currentScore(fixture.scores, "home", home.id);
     const awayScore = currentScore(fixture.scores, "away", away.id);
+    const halftimeHomeScore = halftimeScore(fixture.scores, "home", home.id);
+    const halftimeAwayScore = halftimeScore(fixture.scores, "away", away.id);
     return {
       provider: this.name,
       sourceEventId: String(id),
@@ -423,6 +503,8 @@ export class SportmonksProvider implements OddsProvider {
       resultStatus: status,
       ...(homeScore === undefined ? {} : { homeScore }),
       ...(awayScore === undefined ? {} : { awayScore }),
+      ...(halftimeHomeScore === undefined ? {} : { halftimeHomeScore }),
+      ...(halftimeAwayScore === undefined ? {} : { halftimeAwayScore }),
     };
   }
 

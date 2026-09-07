@@ -22,6 +22,13 @@ function monitorStub(): OddsMonitor {
       lastRun: null,
       recentQuotes: [],
       recentMatches: [],
+      historicalPattern: {
+        enabled: false,
+        completedFixtures: 0,
+        oddsSnapshots: 0,
+        analysis: null,
+        message: "Yetersiz tarihsel veri",
+      },
       dailySheet: { date: "2026-08-28", fixtures: [], oddsSnapshotCount: 0, signalCount: 0, recentSignals: [] },
       totals: { runs: 0, alertsSent: 0, errors: 0 },
     }),
@@ -76,5 +83,15 @@ describe("dashboard", () => {
     expect(fixtures.headers.get("content-type")).toContain("text/csv");
     expect(fixtures.headers.get("content-disposition")).toContain("gunun-maclari.csv");
     expect(history.status).toBe(200);
+  });
+
+  it("read-only historical pattern diagnostik ucunu sunar", async () => {
+    const baseUrl = await startServer();
+    const response = await fetch(`${baseUrl}/historical-pattern`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      enabled: false,
+      message: "Yetersiz tarihsel veri",
+    });
   });
 });

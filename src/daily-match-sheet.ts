@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { MatchFixture, OddsAnalysisSignal, OddsMatch, OddsQuote } from "./domain.js";
 import { errorMessage, logger } from "./logger.js";
 
@@ -447,8 +448,17 @@ export class JsonDailyMatchSheet {
 
   private async persist(): Promise<void> {
     await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-    const temporaryPath = `${this.filePath}.${process.pid}.tmp`;
+    const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
     await fs.promises.writeFile(temporaryPath, `${JSON.stringify(this.state, null, 2)}\n`, { mode: 0o600 });
-    await fs.promises.rename(temporaryPath, this.filePath);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await fs.promises.rename(temporaryPath, this.filePath);
+        break;
+      } catch (error) {
+        const code = error instanceof Error && "code" in error ? String(error.code) : "";
+        if (code !== "EPERM" || attempt >= 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
+      }
+    }
   }
 }

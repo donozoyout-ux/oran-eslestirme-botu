@@ -15,15 +15,20 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run build && npm test",
-    "telegram:chat-id": "tsx src/scripts/get-telegram-chat-id.ts"
+    "telegram:chat-id": "tsx src/scripts/get-telegram-chat-id.ts",
+    "historical:import-existing": "tsx src/scripts/import-existing-historical.ts",
+    "historical:backfill": "tsx src/scripts/historical-backfill.ts",
+    "db:migrate": "tsx src/scripts/migrate-historical-db.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
     "dotenv": "^16.5.0",
+    "pg": "^8.23.0",
     "playwright-core": "^1.62.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

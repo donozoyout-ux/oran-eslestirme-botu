@@ -53,6 +53,16 @@ export interface AppConfig {
   adminToken?: string;
   stateFile: string;
   dailySheetFile: string;
+  historicalOddsFile: string;
+  databaseUrl?: string;
+  historicalStorage: "auto" | "postgres" | "json";
+  historicalArchiveEnabled: boolean;
+  historicalBackfillEnabled: boolean;
+  historicalBackfillDays: number;
+  historicalMinSampleSize: number;
+  historicalPriceTolerancePercent: number;
+  historicalLineTolerance: number;
+  historicalRecencyHalfLifeDays: number;
   googleSheetsSpreadsheetId?: string;
   googleServiceAccountEmail?: string;
   googlePrivateKey?: string;
@@ -96,6 +106,12 @@ function chromiumExecutablePath(): string | undefined {
   if (configured) return configured;
   if (process.platform === "linux") return "/usr/bin/chromium-browser";
   return undefined;
+}
+
+function historicalStorageValue(): "auto" | "postgres" | "json" {
+  const value = optional("HISTORICAL_STORAGE") ?? "auto";
+  if (value === "auto" || value === "postgres" || value === "json") return value;
+  throw new Error("HISTORICAL_STORAGE auto, postgres veya json olmali.");
 }
 
 export function loadConfig(): AppConfig {
@@ -155,6 +171,16 @@ export function loadConfig(): AppConfig {
     adminToken: optional("ADMIN_TOKEN"),
     stateFile: path.resolve(optional("STATE_FILE") ?? "./data/alert-state.json"),
     dailySheetFile: path.resolve(optional("DAILY_SHEET_FILE") ?? "./data/daily-match-sheet.json"),
+    historicalOddsFile: path.resolve(optional("HISTORICAL_ODDS_FILE") ?? "./data/historical-odds.json"),
+    databaseUrl: optional("DATABASE_URL"),
+    historicalStorage: historicalStorageValue(),
+    historicalArchiveEnabled: booleanValue("HISTORICAL_ARCHIVE_ENABLED", true),
+    historicalBackfillEnabled: booleanValue("HISTORICAL_BACKFILL_ENABLED", false),
+    historicalBackfillDays: numberValue("HISTORICAL_BACKFILL_DAYS", 7, { min: 1, max: 30 }),
+    historicalMinSampleSize: numberValue("HISTORICAL_MIN_SAMPLE_SIZE", 10, { min: 1, max: 1_000 }),
+    historicalPriceTolerancePercent: numberValue("HISTORICAL_PRICE_TOLERANCE_PERCENT", 10, { min: 0, max: 100 }),
+    historicalLineTolerance: numberValue("HISTORICAL_LINE_TOLERANCE", 0.5, { min: 0, max: 10 }),
+    historicalRecencyHalfLifeDays: numberValue("HISTORICAL_RECENCY_HALF_LIFE_DAYS", 730, { min: 1, max: 10_000 }),
     googleSheetsSpreadsheetId: optional("GOOGLE_SHEETS_SPREADSHEET_ID"),
     googleServiceAccountEmail: optional("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     googlePrivateKey: optional("GOOGLE_PRIVATE_KEY"),

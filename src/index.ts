@@ -11,13 +11,18 @@ import { enableRawOddsGoogleSheet } from "./google-sheets-raw-odds.js";
 import { enableSafeGoogleSheetRefresh } from "./google-sheets-safe-refresh.js";
 import { enableGoogleSheetVisualTheme } from "./google-sheets-visual-theme.js";
 import { errorMessage, logger } from "./logger.js";
+import { HistoricalOddsArchive } from "./historical-odds-archive.js";
+import { HistoricalOddsPatternEngine } from "./historical-odds-pattern-engine.js";
+import { createHistoricalRepository } from "./historical-repository-factory.js";
 import { OddsMonitor } from "./monitor.js";
 import { ConsoleNotifier, TelegramNotifier } from "./notifiers.js";
 import { createProvider } from "./providers/index.js";
+import { SportmonksProvider } from "./providers/sportmonks-provider.js";
 import { ResultTrackingProvider } from "./providers/result-tracking-provider.js";
 import { ResultsTracker } from "./results-tracker.js";
 import { createServer } from "./server.js";
 import { sendTelegramStartupMessage } from "./telegram-health.js";
+import { SportmonksHistoricalBackfill } from "./sportmonks-historical-backfill.js";
 
 // Railway gibi platformlarda Start Command bazen package.json'daki bootstrap'i
 // atlayip dogrudan dist/index.js calistirabiliyor. OAuth duzeltmesini burada da
@@ -61,6 +66,16 @@ try {
     mirror: googleSheetsMirror,
     mirrorSyncMinutes: config.googleSheetsSyncMinutes,
   });
+  const historicalRepository = await createHistoricalRepository(config);
+  const historicalEngine = new HistoricalOddsPatternEngine(historicalRepository, {
+    minSampleSize: config.historicalMinSampleSize,
+    priceTolerancePercent: config.historicalPriceTolerancePercent,
+    lineTolerance: config.historicalLineTolerance,
+    recencyHalfLifeDays: config.historicalRecencyHalfLifeDays,
+  });
+  const historicalArchive = config.historicalArchiveEnabled ? new HistoricalOddsArchive(historicalRepository, historicalEngine, {
+    maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
+  }) : undefined;
   const monitor = new OddsMonitor(provider, notifier, alertStore, {
     tolerancePercent: config.tolerancePercent,
     maxQuoteAgeSeconds: config.maxQuoteAgeSeconds,
@@ -69,7 +84,7 @@ try {
     prematchAlertMinSources: config.prematchAlertMinSources,
     prematchAlertMinConfidence: config.prematchAlertMinConfidence,
     eventKickoffToleranceMinutes: config.eventKickoffToleranceMinutes,
-  }, dailySheet);
+  }, dailySheet, historicalArchive);
   const server = createServer(monitor, config.adminToken);
 
   server.listen(config.port, "0.0.0.0", () => {
@@ -87,6 +102,9 @@ try {
       googleSheetsEnabled,
       googleSheetsSyncMinutes: config.googleSheetsSyncMinutes,
       resultsTrackingEnabled: true,
+      historicalOddsEnabled: true,
+      historicalStorage: historicalRepository.storage,
+      historicalMinSampleSize: config.historicalMinSampleSize,
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });
@@ -100,6 +118,23 @@ try {
     }
 
     monitor.start();
+    if (config.historicalBackfillEnabled && config.sportmonksToken) {
+      const backfillProvider = new SportmonksProvider({
+        apiToken: config.sportmonksToken,
+        bookmakerKeys: config.bookmakerKeys,
+        refreshMinutes: config.sportmonksRefreshMinutes,
+        maxPages: config.sportmonksMaxPages,
+        leagueScope: config.leagueScope,
+        maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
+        includeOdds: false,
+      });
+      void new SportmonksHistoricalBackfill(backfillProvider, historicalRepository)
+        .run(config.historicalBackfillDays)
+        .then((result) => logger.info("SportMonks historical backfill tamamlandi.", { ...result }))
+        .catch((error) => logger.warn("SportMonks historical backfill tamamlanamadi; monitor devam ediyor.", { error: errorMessage(error) }));
+    } else if (config.historicalBackfillEnabled) {
+      logger.warn("HISTORICAL_BACKFILL_ENABLED acik ancak SPORTMONKS_API_TOKEN yok; backfill atlandi.");
+    }
   });
 
   const shutdown = (signal: string): void => {
@@ -107,13 +142,13 @@ try {
     monitor.stop();
     server.close(() => {
       if (!provider.close) {
-        process.exit(0);
+        void historicalRepository.close?.().finally(() => process.exit(0));
         return;
       }
       void provider
         .close()
         .catch((error) => logger.warn("Saglayici kapatilamadi.", { error: errorMessage(error) }))
-        .finally(() => process.exit(0));
+        .finally(() => void historicalRepository.close?.().finally(() => process.exit(0)));
     });
     setTimeout(() => process.exit(1), 10_000).unref();
   };

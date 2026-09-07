@@ -7,7 +7,10 @@ interface FootballDataMatch {
   competition?: { name?: string };
   homeTeam?: { name?: string };
   awayTeam?: { name?: string };
-  score?: { fullTime?: { home?: number | null; away?: number | null } };
+  score?: {
+    fullTime?: { home?: number | null; away?: number | null };
+    halfTime?: { home?: number | null; away?: number | null };
+  };
 }
 
 interface FootballDataResponse {
@@ -113,6 +116,8 @@ export class FootballDataFixtureProvider implements OddsProvider {
       const resolvedStatus = resultStatus(status);
       const homeScore = match.score?.fullTime?.home;
       const awayScore = match.score?.fullTime?.away;
+      const halftimeHomeScore = match.score?.halfTime?.home;
+      const halftimeAwayScore = match.score?.halfTime?.away;
       fixtures.push({
         provider: this.name,
         sourceEventId: String(id),
@@ -126,6 +131,8 @@ export class FootballDataFixtureProvider implements OddsProvider {
         resultStatus: resolvedStatus,
         ...(typeof homeScore === "number" ? { homeScore } : {}),
         ...(typeof awayScore === "number" ? { awayScore } : {}),
+        ...(typeof halftimeHomeScore === "number" ? { halftimeHomeScore } : {}),
+        ...(typeof halftimeAwayScore === "number" ? { halftimeAwayScore } : {}),
       });
     }
     this.lastFixtures = fixtures;

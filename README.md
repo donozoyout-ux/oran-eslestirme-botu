@@ -212,6 +212,16 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `ADMIN_TOKEN` | bos | `/run-once` ucunu acar ve korur |
 | `STATE_FILE` | `./data/alert-state.json` | Bildirim tekillestirme durumu |
 | `DAILY_SHEET_FILE` | `./data/daily-match-sheet.json` | Gunluk fikstur, oran gecmisi ve sinyal tablosu |
+| `HISTORICAL_ODDS_FILE` | `./data/historical-odds.json` | Tamamlanmis maclar ve historical odds snapshot arsivi |
+| `DATABASE_URL` | bos | Varsa historical arsiv icin tercih edilen PostgreSQL baglantisi (status'ta gosterilmez) |
+| `HISTORICAL_STORAGE` | `auto` | `auto` DATABASE_URL varsa postgres, yoksa JSON; `postgres`/`json` ile zorlanabilir |
+| `HISTORICAL_ARCHIVE_ENABLED` | `true` | Her basarili taramada gercek odds degisimlerini arsivler |
+| `HISTORICAL_BACKFILL_ENABLED` | `false` | Backfill icin operasyonel bayrak; backfill CLI ile kontrollu calistirilir |
+| `HISTORICAL_BACKFILL_DAYS` | `7` | SportMonks recent fixture/result backfill penceresi (maksimum 30) |
+| `HISTORICAL_MIN_SAMPLE_SIZE` | `10` | Pattern sonucunun yeterli sayilacagi minimum mac sayisi |
+| `HISTORICAL_PRICE_TOLERANCE_PERCENT` | `10` | Closing fiyat benzerligi icin yuzde bandi |
+| `HISTORICAL_LINE_TOLERANCE` | `0.5` | Asian Handicap ve Total Goals line toleransi |
+| `HISTORICAL_RECENCY_HALF_LIFE_DAYS` | `730` | Recency agirliginin yariya indigi gun sayisi |
 | `GOOGLE_SHEETS_SPREADSHEET_ID` | bos | Otomatik yazilacak Google Sheet kimligi veya tam baglantisi |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | bos | Sheet'e Duzenleyici verilen servis hesabi e-postasi |
 | `GOOGLE_PRIVATE_KEY` | bos | Servis hesabi RSA ozel anahtari; yalnizca gizli ortam degiskeni |
@@ -228,6 +238,38 @@ Depoda `render.yaml` ve `Dockerfile` hazirdir.
 5. Bildirim testi tamamlaninca `DRY_RUN=false` yapin.
 
 Render ucretsiz web servisleri uykuya alinabilir. Kesintisiz, dakikalik tarama icin uyumayan bir servis plani veya surekli calisan baska bir sunucu gerekir. Yerel JSON durum dosyasi yeniden dagitimda kaybolabilir; uretim asamasinda PostgreSQL/Redis tabanli durum deposuna gecilmelidir.
+
+## Historical odds arsivi
+
+V1-C historical altyapisi tamamlanmis mac kaydini ve oran snapshot'larini ayri
+veri setlerinde tutar. Her gercek mac `canonicalEventId` ile tekillestirilir;
+SportMonks, API-Football, BetExplorer ve diger kaynak ID'leri ayni mac kaydinda
+saklanir. Asian Handicap ve Total Goals `line` degerleri snapshot seviyesinde
+korunur. Kickoff'tan once alinmis son taze provider fiyati, bookmaker ve
+market/secim/line bazinda deterministik `closing` snapshot'i olur. Kickoff
+sonrasi veya stale veri closing hesabina girmez.
+
+`/historical-pattern` endpoint'i ve dashboard alani yalnizca read-only
+istatistik verir. Raw yuzdeler ile recency-weighted yuzdeler API cevabinda ayri
+alanlardir; sistem PLAY/WATCH/PASS veya bahis onerisi uretmez. Minimum sample
+altinda sonuc `insufficient_data` ve panelde `Yetersiz tarihsel veri` olarak
+gosterilir.
+
+`HISTORICAL_STORAGE=auto` ile `DATABASE_URL` varsa idempotent migration calisir ve
+PostgreSQL secilir. Bu Railway production icin onerilen, birden fazla worker'a
+dayanikli yoldur. Baglanti yoksa JSON fallback devam eder. JSON'u production'da
+kullanmak icin Railway Volume'u `/data` altina mount edip
+`HISTORICAL_ODDS_FILE=/data/historical-odds.json` ayarlayin; volume olmadan restart
+ve redeploy history'yi kaybedebilir. Google Sheets mevcut gorunum/arsiv akisini
+korur; pattern engine dogrudan Sheets'e veya filesystem'e bagli degildir.
+
+Mevcut gunluk JSON verisini once yazmadan incelemek icin
+`npm run historical:import-existing -- --dry-run`, uygulamak icin `--apply`
+kullanin. SportMonks son yedi gun fixture/result backfill'i
+`npm run historical:backfill -- --days=7` ile calisir. Abonelikte dogrulanmis bir
+odds-history endpoint'i yoksa sonuc acikca `odds_history_unavailable` olur ve
+closing odds uydurulmaz. Migration elle `npm run db:migrate` ile de tekrar guvenle
+calistirilabilir.
 
 ## Yeni GitHub reposu
 

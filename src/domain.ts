@@ -56,6 +56,8 @@ export interface MatchFixture {
   resultStatus?: FixtureResultStatus;
   homeScore?: number;
   awayScore?: number;
+  halftimeHomeScore?: number;
+  halftimeAwayScore?: number;
 }
 
 export interface OddsMatch {

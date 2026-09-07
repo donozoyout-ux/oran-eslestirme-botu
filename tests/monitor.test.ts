@@ -6,6 +6,7 @@ import { MemoryAlertStore } from "../src/alert-store.js";
 import { JsonDailyMatchSheet } from "../src/daily-match-sheet.js";
 import type { Notifier, OddsAnalysisSignal, OddsMatch, OddsProvider, OddsQuote } from "../src/domain.js";
 import { OddsMonitor } from "../src/monitor.js";
+import type { HistoricalOddsArchive } from "../src/historical-odds-archive.js";
 
 const FIXED_NOW = new Date("2026-08-30T12:00:00.000Z");
 const timestamp = FIXED_NOW.toISOString();
@@ -101,6 +102,14 @@ class ScheduledProvider implements OddsProvider {
 }
 
 describe("OddsMonitor", () => {
+  it("historical collector hatasi ana monitor turunu durdurmaz", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(FIXED_NOW);
+    const failingArchive = { record: async () => { throw new Error("archive unavailable"); } } as unknown as HistoricalOddsArchive;
+    const monitor = new OddsMonitor(new StaticProvider(),new CollectingNotifier(),new MemoryAlertStore(600),monitorOptions(),dailySheet(),failingArchive);
+    const result = await monitor.runOnce();
+    expect(result.quotesFresh).toBe(3);
+    expect(monitor.getStatus().historicalPattern).toMatchObject({ health:"error",lastError:"archive unavailable" });
+  });
   it("3 kaynakta yakin oran olsa bile pozitif value yoksa Telegram'a gondermez", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_NOW);
