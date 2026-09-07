@@ -6,6 +6,7 @@ import type { MatchFixture, OddsQuote } from "../src/domain.js";
 import { HistoricalExistingDataImporter } from "../src/historical-existing-data-importer.js";
 import { HistoricalOddsArchive } from "../src/historical-odds-archive.js";
 import { HistoricalOddsPatternEngine } from "../src/historical-odds-pattern-engine.js";
+import { createHistoricalRepository } from "../src/historical-repository-factory.js";
 import type { HistoricalCompletedFixture, HistoricalOddsSnapshot } from "../src/historical-odds.js";
 import { JsonHistoricalOddsRepository, MemoryHistoricalOddsRepository } from "../src/historical-odds-repository.js";
 import { HISTORICAL_POSTGRES_MIGRATION } from "../src/historical-postgres-schema.js";
@@ -39,6 +40,13 @@ function snapshot(id:string, market:"handicap"|"total_goals", type:"prematch"|"c
 }
 
 describe("durable historical archive", () => {
+  it("explicit postgres storage DATABASE_URL olmadan acik hata verir", async () => {
+    await expect(createHistoricalRepository({
+      historicalStorage: "postgres",
+      historicalOddsFile: "unused.json",
+    })).rejects.toThrow("HISTORICAL_STORAGE=postgres icin DATABASE_URL gerekli.");
+  });
+
   it("yalniz gercek price degisimini yazar, opening ve closing restartlarda tekildir", async () => {
     const repository = new MemoryHistoricalOddsRepository();
     const engine = new HistoricalOddsPatternEngine(repository);

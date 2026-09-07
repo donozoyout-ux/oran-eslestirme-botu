@@ -29,6 +29,7 @@ export interface AppConfig {
   scraperWaitMs: number;
   scraperAllowVisibleBookmakerFallback: boolean;
   leagueScope: LeagueScope;
+  historicalLeagueScope: LeagueScope;
   prematchTrackHours: number;
   prematchFarPollMinutes: number;
   prematchNearPollMinutes: number;
@@ -101,6 +102,12 @@ function leagueScopeValue(): LeagueScope {
   throw new Error(`SCRAPER_LEAGUE_SCOPE all veya ${DEFAULT_LEAGUE_SCOPE} olmali.`);
 }
 
+function historicalLeagueScopeValue(): LeagueScope {
+  const value = optional("HISTORICAL_LEAGUE_SCOPE") ?? "all";
+  if (value === "all" || value === DEFAULT_LEAGUE_SCOPE) return value;
+  throw new Error(`HISTORICAL_LEAGUE_SCOPE all veya ${DEFAULT_LEAGUE_SCOPE} olmali.`);
+}
+
 function chromiumExecutablePath(): string | undefined {
   const configured = optional("CHROMIUM_EXECUTABLE_PATH");
   if (configured) return configured;
@@ -147,6 +154,7 @@ export function loadConfig(): AppConfig {
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
     scraperAllowVisibleBookmakerFallback: booleanValue("SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK", true),
     leagueScope: leagueScopeValue(),
+    historicalLeagueScope: historicalLeagueScopeValue(),
     prematchTrackHours: numberValue("PREMATCH_TRACK_HOURS", 6, { min: 1, max: 48 }),
     prematchFarPollMinutes: numberValue("PREMATCH_FAR_POLL_MINUTES", 60, { min: 1, max: 720 }),
     prematchNearPollMinutes: numberValue("PREMATCH_NEAR_POLL_MINUTES", 15, { min: 1, max: 180 }),
@@ -187,6 +195,9 @@ export function loadConfig(): AppConfig {
     googleSheetsSyncMinutes: numberValue("GOOGLE_SHEETS_SYNC_MINUTES", 1, { min: 1, max: 1_440 }),
   };
 
+  if (config.historicalStorage === "postgres" && !config.databaseUrl) {
+    throw new Error("HISTORICAL_STORAGE=postgres icin DATABASE_URL gerekli.");
+  }
   if (config.provider === "the_odds_api" && !config.oddsApiKey) throw new Error("ODDS_PROVIDER=the_odds_api icin ODDS_API_KEY gerekli.");
   if (!config.dryRun && (!config.telegramBotToken || !config.telegramChatId)) {
     throw new Error("DRY_RUN=false iken TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID gerekli.");

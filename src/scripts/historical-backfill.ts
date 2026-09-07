@@ -11,8 +11,12 @@ const recheck = process.argv.includes("--recheck");
 const repository = await createHistoricalRepository(config);
 try {
   const provider = new SportmonksProvider({ apiToken:config.sportmonksToken,bookmakerKeys:config.bookmakerKeys,
-    refreshMinutes:config.sportmonksRefreshMinutes,maxPages:config.sportmonksMaxPages,leagueScope:config.leagueScope,
+    refreshMinutes:config.sportmonksRefreshMinutes,maxPages:config.sportmonksMaxPages,leagueScope:config.historicalLeagueScope,
     maxLiveEventAgeMinutes:config.maxLiveEventAgeMinutes,includeOdds:false });
-  const result = await new SportmonksHistoricalBackfill(provider, repository).run(days, new Date(), { recheck });
+  const result = await new SportmonksHistoricalBackfill(provider, repository, {
+    historicalLeagueScope: config.historicalLeagueScope,
+    databaseConfigured: Boolean(config.databaseUrl),
+    storageRequested: config.historicalStorage,
+  }).run(days, new Date(), { recheck });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally { await repository.close?.(); }

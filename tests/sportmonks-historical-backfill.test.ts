@@ -153,4 +153,29 @@ describe("SportmonksHistoricalBackfill production davranisi", () => {
       expect(pkg.scripts[name]).not.toContain("tsx");
     }
   });
+
+  it("database diagnostics connection string yerine yalniz configured durumunu raporlar", async () => {
+    const databaseUrl = "postgres://secret-user:secret-password@private-host/history";
+    const provider = { fetchHistoricalDay: async (date: string) => dayResponse(date) } as unknown as SportmonksProvider;
+    const result = await new SportmonksHistoricalBackfill(provider, new MemoryHistoricalOddsRepository(), {
+      historicalLeagueScope: "all",
+      databaseConfigured: Boolean(databaseUrl),
+      storageRequested: "postgres",
+    }).run(1, NOW);
+    const diagnostic = getProviderDiagnostics().sportmonks_historical;
+    const serialized = JSON.stringify({ result, diagnostic });
+
+    expect(result).toMatchObject({
+      historicalLeagueScope: "all",
+      databaseConfigured: true,
+      storageRequested: "postgres",
+    });
+    expect(diagnostic).toMatchObject({
+      historicalLeagueScope: "all",
+      databaseConfigured: true,
+      storageRequested: "postgres",
+    });
+    expect(serialized).not.toContain(databaseUrl);
+    expect(serialized).not.toContain("secret-password");
+  });
 });

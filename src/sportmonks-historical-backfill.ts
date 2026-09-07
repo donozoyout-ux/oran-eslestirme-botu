@@ -4,12 +4,18 @@ import type { MatchFixture } from "./domain.js";
 import { historicalSnapshotId } from "./historical-odds-archive.js";
 import type { HistoricalCompletedFixture, HistoricalOddsSnapshot } from "./historical-odds.js";
 import type { HistoricalOddsRepository } from "./historical-odds-repository.js";
+import { DEFAULT_LEAGUE_SCOPE, type LeagueScope } from "./league-scope.js";
 import { setProviderDiagnostic } from "./provider-diagnostics.js";
 import type { SportmonksProvider } from "./providers/sportmonks-provider.js";
 
 interface CheckpointRange { start: string; end: string }
 interface RangeCheckpoint { version: 1; ranges: CheckpointRange[] }
 export interface BackfillOptions { recheck?: boolean }
+export interface BackfillDiagnostics {
+  historicalLeagueScope: LeagueScope;
+  databaseConfigured: boolean;
+  storageRequested: "auto" | "postgres" | "json";
+}
 
 export interface BackfillResult {
   requestedDays: number;
@@ -24,6 +30,9 @@ export interface BackfillResult {
   oddsSnapshotsStored: number;
   oddsHistoryCapability: "available" | "odds_history_unavailable";
   storageType: "memory" | "json" | "postgres";
+  historicalLeagueScope: LeagueScope;
+  databaseConfigured: boolean;
+  storageRequested: "auto" | "postgres" | "json";
 }
 
 function nextDay(value: string): string {
@@ -82,6 +91,11 @@ export class SportmonksHistoricalBackfill {
   constructor(
     private readonly provider: SportmonksProvider,
     private readonly repository: HistoricalOddsRepository,
+    private readonly diagnostics: BackfillDiagnostics = {
+      historicalLeagueScope: DEFAULT_LEAGUE_SCOPE,
+      databaseConfigured: false,
+      storageRequested: "auto",
+    },
   ) {}
 
   async run(days = 7, now = new Date(), options: BackfillOptions = {}): Promise<BackfillResult> {
@@ -226,6 +240,9 @@ export class SportmonksHistoricalBackfill {
       oddsSnapshotsStored,
       oddsHistoryCapability: oddsResult.capability,
       storageType: this.repository.storage,
+      historicalLeagueScope: this.diagnostics.historicalLeagueScope,
+      databaseConfigured: this.diagnostics.databaseConfigured,
+      storageRequested: this.diagnostics.storageRequested,
     };
     setProviderDiagnostic("sportmonks_historical", {
       enabled: true,
@@ -242,6 +259,9 @@ export class SportmonksHistoricalBackfill {
       resultsStored,
       oddsSnapshotsStored,
       storageType: result.storageType,
+      historicalLeagueScope: result.historicalLeagueScope,
+      databaseConfigured: result.databaseConfigured,
+      storageRequested: result.storageRequested,
       lastProviderRunAt: now.toISOString(),
       lastSuccessAt: now.toISOString(),
       lastError: null,

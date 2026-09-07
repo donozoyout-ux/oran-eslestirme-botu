@@ -172,4 +172,31 @@ describe("SportmonksProvider", () => {
     const result = await new SportmonksProvider({ ...commonOptions, includeOdds: false }).fetchHistoricalDay("2026-09-02");
     expect(result).toMatchObject({ rawFixturesFetched: 1, fixturesRejectedByLeagueScope: 1, fixturesAccepted: 0, fixtures: [] });
   });
+
+  it("historical scope all iken live scope disindaki fixture'i backfill icin kabul eder", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      data: [fixture({ league: { id: 99, name: "Serie A", country: { name: "Brazil" } } })],
+      pagination: { has_more: false },
+    }), { status: 200 })));
+    const result = await new SportmonksProvider({ ...commonOptions, leagueScope: "all", includeOdds: false })
+      .fetchHistoricalDay("2026-09-02");
+    expect(result).toMatchObject({
+      rawFixturesFetched: 1,
+      fixturesRejectedByLeagueScope: 0,
+      fixturesAccepted: 1,
+    });
+    expect(result.fixtures).toHaveLength(1);
+  });
+
+  it("live provider normal leagueScope disindaki fixture'i kabul etmez", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-02T15:00:00.000Z"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      data: [fixture({ league: { id: 99, name: "Serie A", country: { name: "Brazil" } } })],
+      pagination: { has_more: false },
+    }), { status: 200 })));
+    const provider = new SportmonksProvider({ ...commonOptions, includeOdds: false });
+    expect(await provider.fetchQuotes()).toEqual([]);
+    expect(provider.getLastFixtures()).toEqual([]);
+  });
 });

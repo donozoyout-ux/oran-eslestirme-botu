@@ -215,6 +215,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `HISTORICAL_ODDS_FILE` | `./data/historical-odds.json` | Tamamlanmis maclar ve historical odds snapshot arsivi |
 | `DATABASE_URL` | bos | Varsa historical arsiv icin tercih edilen PostgreSQL baglantisi (status'ta gosterilmez) |
 | `HISTORICAL_STORAGE` | `auto` | `auto` DATABASE_URL varsa postgres, yoksa JSON; `postgres`/`json` ile zorlanabilir |
+| `HISTORICAL_LEAGUE_SCOPE` | `all` | Yalnizca historical backfill/archive research kapsami; `all` veya mevcut varsayilan lig kapsami |
 | `HISTORICAL_ARCHIVE_ENABLED` | `true` | Her basarili taramada gercek odds degisimlerini arsivler |
 | `HISTORICAL_BACKFILL_ENABLED` | `false` | Backfill icin operasyonel bayrak; backfill CLI ile kontrollu calistirilir |
 | `HISTORICAL_BACKFILL_DAYS` | `7` | SportMonks recent fixture/result backfill penceresi (maksimum 30) |
@@ -256,12 +257,26 @@ altinda sonuc `insufficient_data` ve panelde `Yetersiz tarihsel veri` olarak
 gosterilir.
 
 `HISTORICAL_STORAGE=auto` ile `DATABASE_URL` varsa idempotent migration calisir ve
-PostgreSQL secilir. Bu Railway production icin onerilen, birden fazla worker'a
-dayanikli yoldur. Baglanti yoksa JSON fallback devam eder. JSON'u production'da
+PostgreSQL secilir; baglanti yoksa mevcut JSON fallback davranisi devam eder.
+Railway production'da sessiz JSON fallback'i engellemek icin asagidaki explicit
+ayarlar onerilir. `HISTORICAL_STORAGE=postgres` seciliyken `DATABASE_URL` yoksa
+startup ve backfill acik hata ile durur; connection string loglanmaz.
+
+```env
+HISTORICAL_STORAGE=postgres
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+HISTORICAL_LEAGUE_SCOPE=all
+```
+
+Bu, birden fazla worker'a dayanikli yoldur. JSON'u production'da
 kullanmak icin Railway Volume'u `/data` altina mount edip
 `HISTORICAL_ODDS_FILE=/data/historical-odds.json` ayarlayin; volume olmadan restart
 ve redeploy history'yi kaybedebilir. Google Sheets mevcut gorunum/arsiv akisini
 korur; pattern engine dogrudan Sheets'e veya filesystem'e bagli degildir.
+
+`HISTORICAL_LEAGUE_SCOPE` yalnizca historical backfill/archive research veri setini
+etkiler. `SCRAPER_LEAGUE_SCOPE` ve normal live SportMonks provider mevcut live lig
+kapsamini kullanmaya devam eder; bu ayar Telegram/live alarm kapsamlarini genisletmez.
 
 Mevcut gunluk JSON verisini once yazmadan incelemek icin
 `npm run historical:import-existing -- --dry-run`, uygulamak icin `--apply`

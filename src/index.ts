@@ -124,11 +124,15 @@ try {
         bookmakerKeys: config.bookmakerKeys,
         refreshMinutes: config.sportmonksRefreshMinutes,
         maxPages: config.sportmonksMaxPages,
-        leagueScope: config.leagueScope,
+        leagueScope: config.historicalLeagueScope,
         maxLiveEventAgeMinutes: config.maxLiveEventAgeMinutes,
         includeOdds: false,
       });
-      void new SportmonksHistoricalBackfill(backfillProvider, historicalRepository)
+      void new SportmonksHistoricalBackfill(backfillProvider, historicalRepository, {
+        historicalLeagueScope: config.historicalLeagueScope,
+        databaseConfigured: Boolean(config.databaseUrl),
+        storageRequested: config.historicalStorage,
+      })
         .run(config.historicalBackfillDays)
         .then((result) => logger.info("SportMonks historical backfill tamamlandi.", { ...result }))
         .catch((error) => logger.warn("SportMonks historical backfill tamamlanamadi; monitor devam ediyor.", { error: errorMessage(error) }));
