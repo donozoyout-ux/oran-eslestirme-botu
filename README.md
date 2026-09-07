@@ -266,7 +266,13 @@ korur; pattern engine dogrudan Sheets'e veya filesystem'e bagli degildir.
 Mevcut gunluk JSON verisini once yazmadan incelemek icin
 `npm run historical:import-existing -- --dry-run`, uygulamak icin `--apply`
 kullanin. SportMonks son yedi gun fixture/result backfill'i
-`npm run historical:backfill -- --days=7` ile calisir. Abonelikte dogrulanmis bir
+`npm run historical:backfill -- --days=7` ile calisir. Bu production komutlari
+`npm run build` ile uretilmis `dist/scripts` ciktilarini Node.js ile calistirir;
+kaynak TypeScript'i dogrudan calistirmak icin ayni komutlarin `:dev` son ekli
+surumleri kullanilabilir. Islenmis gunleri yeniden sorgulamak icin
+`npm run historical:backfill -- --days=7 --recheck` kullanin. Backfill raporu ham
+fikstur, league scope reddi, kabul/final sonuc ve gercekten eklenen snapshot
+sayilarini ayri verir. Abonelikte dogrulanmis bir
 odds-history endpoint'i yoksa sonuc acikca `odds_history_unavailable` olur ve
 closing odds uydurulmaz. Migration elle `npm run db:migrate` ile de tekrar guvenle
 calistirilabilir.

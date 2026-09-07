@@ -7,11 +7,12 @@ const config = loadConfig();
 if (!config.sportmonksToken) throw new Error("Historical backfill icin SPORTMONKS_API_TOKEN gerekli.");
 const daysArg = process.argv.find((arg) => arg.startsWith("--days="));
 const days = daysArg ? Number(daysArg.slice(7)) : config.historicalBackfillDays;
+const recheck = process.argv.includes("--recheck");
 const repository = await createHistoricalRepository(config);
 try {
   const provider = new SportmonksProvider({ apiToken:config.sportmonksToken,bookmakerKeys:config.bookmakerKeys,
     refreshMinutes:config.sportmonksRefreshMinutes,maxPages:config.sportmonksMaxPages,leagueScope:config.leagueScope,
     maxLiveEventAgeMinutes:config.maxLiveEventAgeMinutes,includeOdds:false });
-  const result = await new SportmonksHistoricalBackfill(provider, repository).run(days);
+  const result = await new SportmonksHistoricalBackfill(provider, repository).run(days, new Date(), { recheck });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally { await repository.close?.(); }

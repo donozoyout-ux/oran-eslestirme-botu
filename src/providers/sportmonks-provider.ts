@@ -102,6 +102,9 @@ export interface SportmonksProviderOptions {
 
 export interface SportmonksHistoricalDay {
   fixtures: MatchFixture[];
+  rawFixturesFetched: number;
+  fixturesRejectedByLeagueScope: number;
+  fixturesAccepted: number;
   oddsHistoryCapability: "odds_history_unavailable";
 }
 
@@ -376,8 +379,20 @@ export class SportmonksProvider implements OddsProvider {
   async fetchHistoricalDay(date: string, signal?: AbortSignal): Promise<SportmonksHistoricalDay> {
     const raw = await this.fetchFixtures(date, false, signal);
     const reference = new Date(`${date}T23:59:59+03:00`);
+    let fixturesRejectedByLeagueScope = 0;
+    for (const fixture of raw) {
+      const leagueName = fixture.league?.name;
+      const country = fixture.league?.country?.name ?? fixture.league?.country?.official_name;
+      if (leagueName && !isLeagueLabelInScope(country, leagueName, this.options.leagueScope)) {
+        fixturesRejectedByLeagueScope += 1;
+      }
+    }
+    const fixtures = raw.map((fixture) => this.mapFixture(fixture, reference)).filter((fixture): fixture is MatchFixture => fixture !== null);
     return {
-      fixtures: raw.map((fixture) => this.mapFixture(fixture, reference)).filter((fixture): fixture is MatchFixture => fixture !== null),
+      fixtures,
+      rawFixturesFetched: raw.length,
+      fixturesRejectedByLeagueScope,
+      fixturesAccepted: fixtures.length,
       // Fixture endpoint'inin odds iliskisi degisim gecmisi degildir. History
       // endpoint yetkisi dogrulanmadan bu degerlerden sahte closing uretilmez.
       oddsHistoryCapability: "odds_history_unavailable",

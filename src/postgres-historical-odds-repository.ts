@@ -131,22 +131,27 @@ export class PostgresHistoricalOddsRepository implements HistoricalOddsRepositor
     this.lastArchiveWrite = new Date().toISOString();
   }
 
-  async saveOddsSnapshots(snapshots: HistoricalOddsSnapshot[]): Promise<void> {
+  async saveOddsSnapshots(snapshots: HistoricalOddsSnapshot[]): Promise<number> {
     const client = await this.pool.connect?.(); const target = client ?? this.pool;
+    let inserted = 0;
     try {
       if (client) await target.query("BEGIN");
-      for (const s of snapshots) await this.runOn(target, `/* historical:snapshot-insert */ INSERT INTO historical_odds_snapshots
+      for (const s of snapshots) {
+        const result = await this.runOn(target, `/* historical:snapshot-insert */ INSERT INTO historical_odds_snapshots
       (id,canonical_event_id,provider,source_event_id,league_name,normalized_league_key,home_team,away_team,kickoff,
        snapshot_type,phase,market_key,market_name,period,selection_key,selection_name,line,bookmaker_key,bookmaker_name,price,captured_at,provider_updated_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(id) DO NOTHING`,
       [s.id,s.canonicalEventId,s.provider,s.sourceEventId,s.league,s.normalizedLeagueKey,s.homeTeam,s.awayTeam,s.kickoff,
         s.snapshotType,s.phase,s.marketKey,s.market,s.period,s.selectionKey,s.selection,s.line,s.bookmakerKey,s.bookmaker,s.price,s.snapshotAt,s.providerUpdatedAt]);
+        inserted += result.rowCount ?? 0;
+      }
       if (client) await target.query("COMMIT");
     } catch (error) {
       if (client) await target.query("ROLLBACK");
       throw error;
     } finally { client?.release?.(); }
     if (snapshots.length) this.lastArchiveWrite = new Date().toISOString();
+    return inserted;
   }
 
   async getByCanonicalEvent(id: string): Promise<HistoricalEventData> {

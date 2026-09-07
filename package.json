@@ -16,9 +16,12 @@
     "test:watch": "vitest",
     "check": "npm run build && npm test",
     "telegram:chat-id": "tsx src/scripts/get-telegram-chat-id.ts",
-    "historical:import-existing": "tsx src/scripts/import-existing-historical.ts",
-    "historical:backfill": "tsx src/scripts/historical-backfill.ts",
-    "db:migrate": "tsx src/scripts/migrate-historical-db.ts"
+    "historical:import-existing": "node dist/scripts/import-existing-historical.js",
+    "historical:import-existing:dev": "tsx src/scripts/import-existing-historical.ts",
+    "historical:backfill": "node dist/scripts/historical-backfill.js",
+    "historical:backfill:dev": "tsx src/scripts/historical-backfill.ts",
+    "db:migrate": "node dist/scripts/migrate-historical-db.js",
+    "db:migrate:dev": "tsx src/scripts/migrate-historical-db.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

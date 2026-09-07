@@ -163,4 +163,13 @@ describe("SportmonksProvider", () => {
     const result = await provider.fetchHistoricalOdds([]);
     expect(result).toEqual({capability:"odds_history_unavailable",quotes:[]});
   });
+
+  it("historical fixture endpointinde raw veri scope nedeniyle elenirse sayaclari korur", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      data: [fixture({ league: { id: 99, name: "Serie A", country: { name: "Brazil" } } })],
+      pagination: { has_more: false },
+    }), { status: 200 })));
+    const result = await new SportmonksProvider({ ...commonOptions, includeOdds: false }).fetchHistoricalDay("2026-09-02");
+    expect(result).toMatchObject({ rawFixturesFetched: 1, fixturesRejectedByLeagueScope: 1, fixturesAccepted: 0, fixtures: [] });
+  });
 });

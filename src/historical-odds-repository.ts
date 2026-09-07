@@ -18,7 +18,7 @@ export interface HistoricalOddsRepository {
   initialize?(): Promise<void>;
   close?(): Promise<void>;
   saveCompletedFixture(fixture: HistoricalCompletedFixture): Promise<void>;
-  saveOddsSnapshots(snapshots: HistoricalOddsSnapshot[]): Promise<void>;
+  saveOddsSnapshots(snapshots: HistoricalOddsSnapshot[]): Promise<number>;
   getByCanonicalEvent(canonicalEventId: string): Promise<HistoricalEventData>;
   queryCompletedFixtures(query: HistoricalQuery): Promise<HistoricalCompletedFixture[]>;
   getStats(): Promise<HistoricalRepositoryStats>;
@@ -112,12 +112,14 @@ abstract class BaseHistoricalOddsRepository implements HistoricalOddsRepository 
     }
   }
 
-  async saveOddsSnapshots(snapshots: HistoricalOddsSnapshot[]): Promise<void> {
+  async saveOddsSnapshots(snapshots: HistoricalOddsSnapshot[]): Promise<number> {
     let changed = false;
+    let inserted = 0;
     for (const snapshot of snapshots) {
       if (this.state.snapshots[snapshot.id]) continue;
       this.state.snapshots[snapshot.id] = snapshot;
       changed = true;
+      inserted += 1;
     }
     if (changed) {
       try {
@@ -129,6 +131,7 @@ abstract class BaseHistoricalOddsRepository implements HistoricalOddsRepository 
         throw error;
       }
     }
+    return inserted;
   }
 
   async getByCanonicalEvent(canonicalEventId: string): Promise<HistoricalEventData> {

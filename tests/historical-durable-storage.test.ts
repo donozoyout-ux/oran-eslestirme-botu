@@ -93,7 +93,7 @@ describe("durable historical archive", () => {
     let calls=0; const provider={fetchHistoricalDay:async()=>{calls+=1;return {fixtures:[fixture("finished",[2,1])],oddsHistoryCapability:"odds_history_unavailable" as const};}} as unknown as SportmonksProvider;
     const repo=new MemoryHistoricalOddsRepository(); const backfill=new SportmonksHistoricalBackfill(provider,repo); const result=await backfill.run(1,new Date("2026-09-09T12:00:00Z"));
     await backfill.run(1,new Date("2026-09-09T12:00:00Z"));
-    expect(result).toMatchObject({results:1,oddsSnapshots:0,oddsHistoryCapability:"odds_history_unavailable"});
+    expect(result).toMatchObject({resultsStored:1,oddsSnapshotsStored:0,oddsHistoryCapability:"odds_history_unavailable"});
     expect(calls).toBe(1);
   });
 });
