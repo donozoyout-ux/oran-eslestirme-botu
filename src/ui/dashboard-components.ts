@@ -50,7 +50,7 @@ export const dashboardShell = String.raw`
       </section>
 
       <section class="page" id="page-analysis" data-page="analysis" aria-labelledby="analysis-title">
-        <div class="page-heading"><div><p class="eyebrow">Read-only intelligence</p><h2 id="analysis-title">Maç Analizi</h2><p>Son 5/10 maç, iç-dış saha, gol eğilimi, şut/xG verisi ve veri güvenini sade şekilde gösterir.</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">Read-only intelligence</p><h2 id="analysis-title">Maç Analizi</h2><p>Son 5/10 maç, iç-dış saha, gol eğilimi, şut/xG verisi ve Data Confidence değerini sade şekilde gösterir.</p></div></div>
         <div class="analysis-list" id="analysisList"></div>
       </section>
 
