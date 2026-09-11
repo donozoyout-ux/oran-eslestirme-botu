@@ -139,7 +139,7 @@ export function loadConfig(): AppConfig {
     apiFootballKey: optional("API_FOOTBALL_KEY"),
     footballDataToken: optional("FOOTBALL_DATA_TOKEN"),
     sportmonksToken: optional("SPORTMONKS_API_TOKEN"),
-    sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league"),
+    sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league,soccer_uefa_europa_conference_league"),
     bookmakerKeys: csv("BOOKMAKER_KEYS", "pinnacle,betfair_ex_eu,betfair,bet365"),
     regions: csv("REGIONS", "eu,uk"),
     apiFootballMaxFixtures: numberValue("API_FOOTBALL_MAX_FIXTURES", 2, { min: 1, max: 10 }),
