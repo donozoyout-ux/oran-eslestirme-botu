@@ -8,7 +8,19 @@ const TRACKED_LEAGUES: Readonly<Record<string, readonly string[]>> = {
   germany: ["bundesliga"],
   italy: ["serie-a"],
   france: ["ligue-1"],
+  europe: [
+    "champions-league",
+    "uefa-champions-league",
+    "europa-conference-league",
+    "uefa-europa-conference-league",
+    "conference-league",
+  ],
 };
+
+const UEFA_WORLD_LABELS = new Set([
+  "uefa-champions-league",
+  "uefa-europa-conference-league",
+]);
 
 function slug(value: string): string {
   return value
@@ -34,7 +46,7 @@ function leaguePath(url: string): { country: string; competition: string } | nul
   }
 }
 
-/** BetExplorer/web kaynaklari icin Big Five ust ligleri + English Championship. */
+/** BetExplorer/web kaynaklari icin Big Five + Championship + secili UEFA kupalari. */
 export function isLeagueInScope(url: string, scope: LeagueScope): boolean {
   if (scope === "all") return true;
   const path = leaguePath(url);
@@ -51,10 +63,17 @@ export function isLeagueLabelInScope(
   if (scope === "all") return true;
   if (!competition) return false;
   const countrySlug = countryKey(country ?? "");
-  return (TRACKED_LEAGUES[countrySlug] ?? []).includes(slug(competition));
+  const competitionSlug = slug(competition);
+
+  if ((TRACKED_LEAGUES[countrySlug] ?? []).includes(competitionSlug)) return true;
+
+  // Bazi API'ler UEFA turnuvalarini "World" altinda donduruyor.
+  if (countrySlug === "world" && UEFA_WORLD_LABELS.has(competitionSlug)) return true;
+
+  return false;
 }
 
 export function leagueScopeLabel(scope: LeagueScope): string {
   if (scope === "all") return "Tum ligler";
-  return "Premier League + Championship + La Liga + Bundesliga + Serie A + Ligue 1";
+  return "Premier League + Championship + La Liga + Bundesliga + Serie A + Ligue 1 + UEFA Champions League + UEFA Conference League";
 }
