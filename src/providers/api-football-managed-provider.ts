@@ -19,6 +19,8 @@ export class ManagedApiFootballProvider implements OddsProvider {
   private nextFixtureRetryAt: number | null = null;
   private fixtureCount = 0;
   private quoteCount = 0;
+  private providerBlocked = false;
+  private blockedReason: string | null = null;
 
   constructor(
     private readonly factory: () => OddsProvider,
@@ -31,6 +33,11 @@ export class ManagedApiFootballProvider implements OddsProvider {
 
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const now = Date.now();
+
+    if (this.providerBlocked) {
+      this.publish("provider_blocked");
+      return [];
+    }
 
     if (this.nextFixtureRetryAt !== null && now < this.nextFixtureRetryAt) {
       this.publish("retry_wait");
@@ -69,6 +76,19 @@ export class ManagedApiFootballProvider implements OddsProvider {
       this.quoteCount = 0;
       this.lastError = errorText(error);
 
+      const normalizedError = this.lastError.toLowerCase();
+      const suspended = normalizedError.includes("account is suspended")
+        || normalizedError.includes("account suspended")
+        || normalizedError.includes("access suspended");
+
+      if (suspended) {
+        this.providerBlocked = true;
+        this.blockedReason = "API-Football hesabi saglayici tarafinda askida. Diger veri kaynaklariyla devam ediliyor.";
+        this.nextFixtureRetryAt = null;
+        this.publish("account_suspended");
+        return [];
+      }
+
       if (fixtures.length === 0) {
         this.nextFixtureRetryAt = now + this.retryMs;
         this.publish("fixture_error");
@@ -91,12 +111,14 @@ export class ManagedApiFootballProvider implements OddsProvider {
     setProviderDiagnostic(this.name, {
       enabled: true,
       status,
-      leagueScope: "Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1",
+      leagueScope: "Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1, UEFA Champions League, UEFA Conference League",
       fixtureCount: this.fixtureCount,
       quoteCount: this.quoteCount,
       lastProviderRunAt: this.lastProviderRunAt === null ? null : new Date(this.lastProviderRunAt).toISOString(),
       lastSuccessAt: this.lastSuccessAt === null ? null : new Date(this.lastSuccessAt).toISOString(),
       lastError: this.lastError,
+      blockedReason: this.blockedReason,
+      fallbackActive: this.providerBlocked,
       nextFixtureRetryAt: this.nextFixtureRetryAt === null ? null : new Date(this.nextFixtureRetryAt).toISOString(),
     });
   }

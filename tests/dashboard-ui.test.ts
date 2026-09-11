@@ -9,9 +9,9 @@ describe("production dashboard UI", () => {
     for (const label of [
       "Genel Bakış",
       "Bugünün Maçları",
-      "Maç Analizi",
-      "Historical",
-      "Market",
+      "Takım Analizi",
+      "Geçmiş Veri",
+      "Oranlar & Piyasa",
       "Sistem",
       "Ayarlar",
     ]) expect(dashboardHtml).toContain(label);
@@ -73,6 +73,9 @@ describe("production dashboard UI", () => {
       expect(dashboardShell).toContain(`>${tab}</button>`);
     expect(dashboardClient).toContain("openDrawer(fixture)");
     expect(dashboardClient).toContain("Strength normalization");
+    expect(dashboardShell).toContain("Şampiyonlar Ligi");
+    expect(dashboardShell).toContain("Konferans Ligi");
+    expect(dashboardClient).toContain("data-competition");
   });
 
   it("network hatasında son veriyi korur ve stale uyarısı gösterir", () => {

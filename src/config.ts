@@ -68,6 +68,7 @@ export interface AppConfig {
   matchIntelligenceRecentMatches: number;
   matchIntelligenceCacheMinutes: number;
   matchIntelligenceMinSample: number;
+  sportmonksFixtureMatchToleranceMinutes: number;
   googleSheetsSpreadsheetId?: string;
   googleServiceAccountEmail?: string;
   googlePrivateKey?: string;
@@ -139,7 +140,7 @@ export function loadConfig(): AppConfig {
     apiFootballKey: optional("API_FOOTBALL_KEY"),
     footballDataToken: optional("FOOTBALL_DATA_TOKEN"),
     sportmonksToken: optional("SPORTMONKS_API_TOKEN"),
-    sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league"),
+    sportKeys: csv("SPORT_KEYS", "soccer_epl,soccer_uefa_champs_league,soccer_uefa_europa_conference_league"),
     bookmakerKeys: csv("BOOKMAKER_KEYS", "pinnacle,betfair_ex_eu,betfair,bet365"),
     regions: csv("REGIONS", "eu,uk"),
     apiFootballMaxFixtures: numberValue("API_FOOTBALL_MAX_FIXTURES", 2, { min: 1, max: 10 }),
@@ -197,6 +198,7 @@ export function loadConfig(): AppConfig {
     matchIntelligenceRecentMatches: numberValue("MATCH_INTELLIGENCE_RECENT_MATCHES", 10, { min: 5, max: 20 }),
     matchIntelligenceCacheMinutes: numberValue("MATCH_INTELLIGENCE_CACHE_MINUTES", 45, { min: 5, max: 1_440 }),
     matchIntelligenceMinSample: numberValue("MATCH_INTELLIGENCE_MIN_SAMPLE", 5, { min: 1, max: 10 }),
+    sportmonksFixtureMatchToleranceMinutes: numberValue("SPORTMONKS_FIXTURE_MATCH_TOLERANCE_MINUTES", 60, { min: 5, max: 180 }),
     googleSheetsSpreadsheetId: optional("GOOGLE_SHEETS_SPREADSHEET_ID"),
     googleServiceAccountEmail: optional("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     googlePrivateKey: optional("GOOGLE_PRIVATE_KEY"),

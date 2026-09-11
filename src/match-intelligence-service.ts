@@ -16,6 +16,13 @@ export interface MatchIntelligenceStatus {
   rateLimitRemaining: number | null;
   rateLimitResetSeconds: number | null;
   snapshotsStored: number;
+  targetsSeen: number;
+  targetsResolved: number;
+  targetsNotFound: number;
+  targetsAmbiguous: number;
+  lastResolvedEvent: string | null;
+  lastResolutionError: string | null;
+  capabilitiesProbed: boolean;
   results: MatchIntelligenceResult[];
 }
 
@@ -31,7 +38,8 @@ export class MatchIntelligenceService {
   private readonly statusValue: MatchIntelligenceStatus = {
     enabled: true, provider: "sportmonks", cacheSize: 0, lastRunAt: null, lastSuccessAt: null, lastError: null,
     capabilityMap: { ...EMPTY_CAPABILITIES }, rateLimitRemaining: null, rateLimitResetSeconds: null,
-    snapshotsStored: 0, results: [],
+    snapshotsStored: 0, targetsSeen: 0, targetsResolved: 0, targetsNotFound: 0, targetsAmbiguous: 0,
+    lastResolvedEvent: null, lastResolutionError: null, capabilitiesProbed: false, results: [],
   };
 
   constructor(
@@ -48,15 +56,34 @@ export class MatchIntelligenceService {
 
   private async executeRefresh(fixtures: MatchFixture[], now: Date): Promise<MatchIntelligenceStatus> {
     this.statusValue.lastRunAt = now.toISOString();
-    const targets = fixtures.filter((fixture): fixture is MatchFixture & { canonicalEventId: string } =>
-      fixture.provider === "sportmonks" && fixture.phase === "prematch" && Boolean(fixture.canonicalEventId)
-      && Date.parse(fixture.commenceTime) > now.getTime());
+    const seenTargets = new Set<string>();
+    const targets = fixtures.filter((fixture): fixture is MatchFixture & { canonicalEventId: string } => {
+      if (fixture.phase !== "prematch" || !fixture.canonicalEventId || Date.parse(fixture.commenceTime) <= now.getTime()) return false;
+      if (seenTargets.has(fixture.canonicalEventId)) return false;
+      seenTargets.add(fixture.canonicalEventId);
+      return true;
+    });
+    this.statusValue.targetsSeen = targets.length;
+    this.statusValue.targetsResolved = 0;
+    this.statusValue.targetsNotFound = 0;
+    this.statusValue.targetsAmbiguous = 0;
+    this.statusValue.lastResolutionError = null;
     const results: MatchIntelligenceResult[] = [];
     for (const target of targets) {
       const cached = this.cache.get(target.canonicalEventId);
       if (cached && cached.expiresAt > now.getTime()) { results.push(cached.result); continue; }
       try {
         const providerResult = await this.provider.fetch(target);
+        const resolution = providerResult.resolution;
+        if (resolution && resolution.status !== "resolved") {
+          if (resolution.status === "ambiguous") this.statusValue.targetsAmbiguous += 1;
+          else this.statusValue.targetsNotFound += 1;
+          this.statusValue.lastResolutionError = resolution.error ?? resolution.status;
+          continue;
+        }
+        this.statusValue.targetsResolved += 1;
+        this.statusValue.lastResolvedEvent = target.canonicalEventId;
+        this.statusValue.capabilitiesProbed = true;
         const result = this.engine.analyze({ ...providerResult.input, generatedAt: now });
         this.cache.set(target.canonicalEventId, { expiresAt: now.getTime() + this.options.cacheMinutes * 60_000, result });
         await this.repository.save(result);
@@ -76,6 +103,9 @@ export class MatchIntelligenceService {
     this.statusValue.results = results.slice(0, 20);
     setProviderDiagnostic("match_intelligence", {
       enabled: true, provider: "sportmonks", cacheSize: this.statusValue.cacheSize,
+      targetsSeen: this.statusValue.targetsSeen, targetsResolved: this.statusValue.targetsResolved,
+      targetsNotFound: this.statusValue.targetsNotFound, targetsAmbiguous: this.statusValue.targetsAmbiguous,
+      lastResolvedEvent: this.statusValue.lastResolvedEvent, capabilitiesProbed: this.statusValue.capabilitiesProbed,
       lastRunAt: this.statusValue.lastRunAt, lastSuccessAt: this.statusValue.lastSuccessAt,
       lastError: this.statusValue.lastError, rateLimitRemaining: this.statusValue.rateLimitRemaining,
       rateLimitResetSeconds: this.statusValue.rateLimitResetSeconds, snapshotsStored: this.statusValue.snapshotsStored,
@@ -91,5 +121,7 @@ export class MatchIntelligenceService {
 
 export function disabledMatchIntelligenceStatus(): MatchIntelligenceStatus {
   return { enabled: false, provider: "sportmonks", cacheSize: 0, lastRunAt: null, lastSuccessAt: null, lastError: null,
-    capabilityMap: { ...EMPTY_CAPABILITIES }, rateLimitRemaining: null, rateLimitResetSeconds: null, snapshotsStored: 0, results: [] };
+    capabilityMap: { ...EMPTY_CAPABILITIES }, rateLimitRemaining: null, rateLimitResetSeconds: null, snapshotsStored: 0,
+    targetsSeen: 0, targetsResolved: 0, targetsNotFound: 0, targetsAmbiguous: 0, lastResolvedEvent: null,
+    lastResolutionError: null, capabilitiesProbed: false, results: [] };
 }

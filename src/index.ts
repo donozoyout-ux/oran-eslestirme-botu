@@ -87,6 +87,7 @@ try {
     ? new MatchIntelligenceService(new SportmonksMatchIntelligenceProvider({
         apiToken: config.sportmonksToken,
         recentMatches: config.matchIntelligenceRecentMatches,
+        fixtureMatchToleranceMinutes: config.sportmonksFixtureMatchToleranceMinutes,
       }), matchIntelligenceRepository, {
         cacheMinutes: config.matchIntelligenceCacheMinutes,
         minSample: config.matchIntelligenceMinSample,
