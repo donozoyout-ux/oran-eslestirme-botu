@@ -10,6 +10,8 @@ describe("tracked league scope", () => {
       ["Germany", "Bundesliga"],
       ["Italy", "Serie A"],
       ["France", "Ligue 1"],
+      ["World", "UEFA Champions League"],
+      ["World", "UEFA Europa Conference League"],
     ] as const;
 
     for (const [country, league] of accepted) {
@@ -19,7 +21,8 @@ describe("tracked league scope", () => {
     expect(isLeagueLabelInScope("Turkey", "Super Lig", DEFAULT_LEAGUE_SCOPE)).toBe(false);
     expect(isLeagueLabelInScope("England", "League One", DEFAULT_LEAGUE_SCOPE)).toBe(false);
     expect(isLeagueLabelInScope("Netherlands", "Eredivisie", DEFAULT_LEAGUE_SCOPE)).toBe(false);
-    expect(isLeagueLabelInScope("World", "UEFA Champions League", DEFAULT_LEAGUE_SCOPE)).toBe(false);
+    expect(isLeagueLabelInScope("World", "UEFA Champions League", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueLabelInScope("World", "UEFA Europa Conference League", DEFAULT_LEAGUE_SCOPE)).toBe(true);
   });
 
   it("BetExplorer URL'lerinde de ayni 6 ligi uygular", () => {
@@ -29,10 +32,12 @@ describe("tracked league scope", () => {
     expect(isLeagueInScope("https://www.betexplorer.com/football/germany/bundesliga/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/italy/serie-a/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/france/ligue-1/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/europe/champions-league/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
+    expect(isLeagueInScope("https://www.betexplorer.com/football/europe/europa-conference-league/", DEFAULT_LEAGUE_SCOPE)).toBe(true);
     expect(isLeagueInScope("https://www.betexplorer.com/football/england/league-one/", DEFAULT_LEAGUE_SCOPE)).toBe(false);
   });
 
   it("arayuz etiketinde 6 ligi acikca gosterir", () => {
-    expect(leagueScopeLabel(DEFAULT_LEAGUE_SCOPE)).toBe("Premier League + Championship + La Liga + Bundesliga + Serie A + Ligue 1");
+    expect(leagueScopeLabel(DEFAULT_LEAGUE_SCOPE)).toBe("Premier League + Championship + La Liga + Bundesliga + Serie A + Ligue 1 + UEFA Champions League + UEFA Conference League");
   });
 });
