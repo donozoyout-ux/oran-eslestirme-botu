@@ -35,6 +35,14 @@ const DEFAULT_TEAM_ALIASES: Record<string, string> = {
   "psg": "paris saint germain",
   "bayern munich": "bayern munchen",
   "besiktas jk": "besiktas",
+  "blackburn rovers": "blackburn",
+  "sheffield utd": "sheffield united",
+  "cardiff city": "cardiff",
+  "stoke city": "stoke",
+  "swansea city": "swansea",
+  "preston north end": "preston",
+  "bolton wanderers": "bolton",
+  "west ham united": "west ham",
 };
 
 const DEFAULT_LEAGUE_ALIASES: Record<string, string> = {
@@ -43,6 +51,9 @@ const DEFAULT_LEAGUE_ALIASES: Record<string, string> = {
   "english premier league": "premier league",
   ucl: "uefa champions league",
   "champions league": "uefa champions league",
+  "uefa europa conference league": "uefa conference league",
+  "europa conference league": "uefa conference league",
+  "conference league": "uefa conference league",
   "turkey super lig": "super lig",
   "turkiye super lig": "super lig",
   laliga: "la liga",
