@@ -68,6 +68,7 @@ export interface AppConfig {
   matchIntelligenceRecentMatches: number;
   matchIntelligenceCacheMinutes: number;
   matchIntelligenceMinSample: number;
+  sportmonksFixtureMatchToleranceMinutes: number;
   googleSheetsSpreadsheetId?: string;
   googleServiceAccountEmail?: string;
   googlePrivateKey?: string;
@@ -197,6 +198,7 @@ export function loadConfig(): AppConfig {
     matchIntelligenceRecentMatches: numberValue("MATCH_INTELLIGENCE_RECENT_MATCHES", 10, { min: 5, max: 20 }),
     matchIntelligenceCacheMinutes: numberValue("MATCH_INTELLIGENCE_CACHE_MINUTES", 45, { min: 5, max: 1_440 }),
     matchIntelligenceMinSample: numberValue("MATCH_INTELLIGENCE_MIN_SAMPLE", 5, { min: 1, max: 10 }),
+    sportmonksFixtureMatchToleranceMinutes: numberValue("SPORTMONKS_FIXTURE_MATCH_TOLERANCE_MINUTES", 60, { min: 5, max: 180 }),
     googleSheetsSpreadsheetId: optional("GOOGLE_SHEETS_SPREADSHEET_ID"),
     googleServiceAccountEmail: optional("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
     googlePrivateKey: optional("GOOGLE_PRIVATE_KEY"),
