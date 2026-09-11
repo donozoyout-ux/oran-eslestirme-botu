@@ -19,10 +19,12 @@ const TRACKED_ODDS_API_SPORT_KEYS = [
   "soccer_germany_bundesliga",
   "soccer_italy_serie_a",
   "soccer_france_ligue_one",
+  "soccer_uefa_champs_league",
+  "soccer_uefa_europa_conference_league",
 ] as const;
 
 const TRACKED_FOOTBALL_DATA_CODES = ["PL", "ELC", "PD", "BL1", "SA", "FL1"] as const;
-const TRACKED_LEAGUE_LABEL = "Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1";
+const TRACKED_LEAGUE_LABEL = "Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1, UEFA Champions League, UEFA Conference League";
 
 function theOddsApiProvider(config: AppConfig): TheOddsApiProvider {
   if (!config.oddsApiKey) throw new Error("ODDS_API_KEY eksik.");
@@ -137,7 +139,7 @@ export function createProvider(config: AppConfig): OddsProvider {
   if (config.provider === "mock") return new MockOddsProvider();
 
   // Acikca ODDS_PROVIDER=the_odds_api secilirse The Odds API ana kaynak olur.
-  // Lig kapsami Big Five ust ligleri + English Championship'tir.
+  // Lig kapsami Big Five + English Championship + UEFA Champions/Conference League.
   if (config.provider === "the_odds_api") {
     const providers: OddsProvider[] = [theOddsApiProvider(config)];
     const apiFootball = apiFootballProvider(config);
@@ -150,7 +152,7 @@ export function createProvider(config: AppConfig): OddsProvider {
   }
 
   // Normal production gorev paylasimi:
-  // Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1.
+  // Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1 + UEFA Champions/Conference League.
   // 1) BetExplorer scraping: ana prematch + ek live oranlar.
   // 2) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
   // 3) Sportmonks: resmi fikstur/skor + abonelik izin veriyorsa prematch/live oranlar.
