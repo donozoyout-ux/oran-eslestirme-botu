@@ -1,5 +1,6 @@
 import type { MatchFixture } from "./domain.js";
 import type { MatchIntelligenceCapability, MatchIntelligenceInput, TeamMatchObservation } from "./match-intelligence.js";
+import { SportmonksFixtureResolver, type SportmonksFixtureResolution } from "./sportmonks-fixture-resolver.js";
 
 type CapabilityMap = MatchIntelligenceInput["capabilityMap"];
 interface Envelope { data?: unknown; rate_limit?: { remaining?: number; resets_in_seconds?: number }; message?: string }
@@ -7,6 +8,7 @@ interface ProviderResult {
   input: MatchIntelligenceInput;
   rateLimitRemaining: number | null;
   rateLimitResetSeconds: number | null;
+  resolution: SportmonksFixtureResolution;
 }
 
 class AccessError extends Error { constructor(readonly status: number) { super(`SportMonks capability HTTP ${status}`); } }
@@ -20,25 +22,45 @@ export class SportmonksMatchIntelligenceProvider {
   readonly name = "sportmonks_match_intelligence";
   private remaining: number | null = null;
   private resetSeconds: number | null = null;
+  private readonly resolver: SportmonksFixtureResolver;
 
   constructor(private readonly options: {
     apiToken: string;
     recentMatches: number;
+    fixtureMatchToleranceMinutes?: number;
     baseUrl?: string;
     requestTimeoutMs?: number;
-  }) {}
+  }) {
+    this.resolver = new SportmonksFixtureResolver({
+      apiToken: options.apiToken,
+      toleranceMinutes: options.fixtureMatchToleranceMinutes ?? 60,
+      baseUrl: options.baseUrl,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
+  }
 
   async fetch(target: MatchFixture & { canonicalEventId: string }, signal?: AbortSignal): Promise<ProviderResult> {
     const capabilities: CapabilityMap = {
       fixtures: "unavailable", teamStats: "unavailable", fixtureStats: "unavailable", events: "unavailable",
       lineups: "unavailable", injuries: "unavailable", xg: "unavailable",
     };
-    const targetRaw = await this.optionalCapability(`/fixtures/${encodeURIComponent(target.sourceEventId)}?include=participants;league`, "fixtures", capabilities, signal);
+    const resolution = await this.resolver.resolve(target, signal);
+    if (resolution.status !== "resolved" || !resolution.sportmonksFixtureId) {
+      return {
+        input: { target, homeTeamId: target.homeTeam, awayTeamId: target.awayTeam, observations: [], capabilityMap: capabilities },
+        rateLimitRemaining: this.remaining,
+        rateLimitResetSeconds: this.resetSeconds,
+        resolution,
+      };
+    }
+
+    const sportmonksFixtureId = resolution.sportmonksFixtureId;
+    const targetRaw = await this.optionalCapability(`/fixtures/${encodeURIComponent(sportmonksFixtureId)}?include=participants;league`, "fixtures", capabilities, signal);
     const targetFixture = this.first(targetRaw);
     const teams = this.teams(targetFixture);
     if (!teams.homeId || !teams.awayId) {
       return { input: { target, homeTeamId: teams.homeId ?? target.homeTeam, awayTeamId: teams.awayId ?? target.awayTeam,
-        observations: [], capabilityMap: capabilities }, rateLimitRemaining: this.remaining, rateLimitResetSeconds: this.resetSeconds };
+        observations: [], capabilityMap: capabilities }, rateLimitRemaining: this.remaining, rateLimitResetSeconds: this.resetSeconds, resolution };
     }
 
     const cutoff = new Date(Math.min(Date.parse(target.commenceTime) - 1, Date.now())).toISOString().slice(0, 10);
@@ -59,7 +81,7 @@ export class SportmonksMatchIntelligenceProvider {
       await this.optionalCapability(`/teams/${teamId}?include=statistics.details.type`, "teamStats", capabilities, signal);
       await this.optionalCapability(`/sidelined/team/${teamId}`, "injuries", capabilities, signal);
     }
-    await this.optionalCapability(`/fixtures/${encodeURIComponent(target.sourceEventId)}?include=lineups`, "lineups", capabilities, signal);
+    await this.optionalCapability(`/fixtures/${encodeURIComponent(sportmonksFixtureId)}?include=lineups`, "lineups", capabilities, signal);
     capabilities.xg = [...observations.values()].some((row) => row.statistics?.some((stat) => stat.xg !== undefined))
       ? "available" : "unavailable";
     return {
@@ -71,6 +93,7 @@ export class SportmonksMatchIntelligenceProvider {
           .slice(0, this.options.recentMatches * 3), capabilityMap: capabilities },
       rateLimitRemaining: this.remaining,
       rateLimitResetSeconds: this.resetSeconds,
+      resolution,
     };
   }
 
