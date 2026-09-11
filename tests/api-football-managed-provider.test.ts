@@ -69,6 +69,28 @@ describe("ManagedApiFootballProvider", () => {
     });
   });
 
+  it("hesap askida hatasinda sistemi dusurmeden diger kaynaklara birakir", async () => {
+    let calls = 0;
+    const provider = new ManagedApiFootballProvider(
+      () => {
+        calls += 1;
+        return stubProvider([], new Error('API-Football hata döndürdü: {"access":"Your account is suspended"}'));
+      },
+      { retryMinutes: 15 },
+    );
+
+    await expect(provider.fetchQuotes()).resolves.toEqual([]);
+    expect(getProviderDiagnostics().api_football).toMatchObject({
+      status: "account_suspended",
+      fallbackActive: true,
+    });
+
+    vi.advanceTimersByTime(30 * 60_000);
+    await expect(provider.fetchQuotes()).resolves.toEqual([]);
+    expect(calls).toBe(1);
+    expect(getProviderDiagnostics().api_football?.status).toBe("provider_blocked");
+  });
+
   it("API hatasini status diagnostics icinde saklar", async () => {
     const provider = new ManagedApiFootballProvider(
       () => stubProvider([], new Error("API-Football 403: invalid key")),
