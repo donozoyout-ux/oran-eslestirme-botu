@@ -100,12 +100,12 @@ export class SportmonksFixtureResolver {
     const abort = () => controller.abort();
     parentSignal?.addEventListener("abort", abort, { once: true });
     try {
-      const url = new URL("${this.options.baseUrl ?? "https://api.sportmonks.com/v3/football"}/fixtures/date/${encodeURIComponent(date)}");
+      const url = new URL(`${this.options.baseUrl ?? "https://api.sportmonks.com/v3/football"}/fixtures/date/${encodeURIComponent(date)}`);
       url.searchParams.set("include", "participants;league");
       url.searchParams.set("per_page", "50");
       const response = await fetch(url, { headers: { Authorization: this.options.apiToken, Accept: "application/json" }, signal: controller.signal });
       const text = await response.text();
-      if (!response.ok) throw new Error(\`SportMonks fixture resolver ${response.status}: ${text.slice(0, 240)}\`);
+      if (!response.ok) throw new Error(`SportMonks fixture resolver ${response.status}: ${text.slice(0, 240)}`);
       const parsed = JSON.parse(text) as Envelope;
       return Array.isArray(parsed.data) ? parsed.data as CandidateFixture[] : [];
     } finally {
