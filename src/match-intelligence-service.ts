@@ -74,10 +74,11 @@ export class MatchIntelligenceService {
       if (cached && cached.expiresAt > now.getTime()) { results.push(cached.result); continue; }
       try {
         const providerResult = await this.provider.fetch(target);
-        if (providerResult.resolution.status !== "resolved") {
-          if (providerResult.resolution.status === "ambiguous") this.statusValue.targetsAmbiguous += 1;
+        const resolution = providerResult.resolution;
+        if (resolution && resolution.status !== "resolved") {
+          if (resolution.status === "ambiguous") this.statusValue.targetsAmbiguous += 1;
           else this.statusValue.targetsNotFound += 1;
-          this.statusValue.lastResolutionError = providerResult.resolution.error ?? providerResult.resolution.status;
+          this.statusValue.lastResolutionError = resolution.error ?? resolution.status;
           continue;
         }
         this.statusValue.targetsResolved += 1;
