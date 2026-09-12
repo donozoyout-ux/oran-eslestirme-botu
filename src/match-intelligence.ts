@@ -127,6 +127,7 @@ export interface MatchIntelligenceResult {
   canonicalEventId: string;
   sourceEventId: string;
   provider: "sportmonks";
+  sources: string[];
   dataVersion: 1;
   generatedAt: string;
   targetKickoff: string;
@@ -155,6 +156,7 @@ export interface MatchIntelligenceInput {
   targetSeasonId?: string;
   observations: TeamMatchObservation[];
   capabilityMap: MatchIntelligenceResult["capabilityMap"];
+  sources?: string[];
   generatedAt?: Date;
 }
 
@@ -357,6 +359,7 @@ export class MatchIntelligenceEngine {
       ? "available" : valid.length ? "partial" : "unavailable";
     return {
       canonicalEventId: input.target.canonicalEventId, sourceEventId: input.target.sourceEventId, provider: "sportmonks",
+      sources: input.sources?.length ? [...new Set(input.sources)] : ["sportmonks"],
       dataVersion: 1, generatedAt: (input.generatedAt ?? new Date()).toISOString(), targetKickoff: input.target.commenceTime,
       home, away, strengths, goalEnvironment: { value: goalValue, reasons }, teamStrengthEnvironment,
       confidence: { score: confidenceScore, availability: dataAvailability, factors, note: "Data confidence; outcome probability degildir." },

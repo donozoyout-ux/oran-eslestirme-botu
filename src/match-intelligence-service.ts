@@ -3,7 +3,7 @@ import { errorMessage, logger } from "./logger.js";
 import { MatchIntelligenceEngine, type MatchIntelligenceResult } from "./match-intelligence.js";
 import type { MatchIntelligenceSnapshotRepository } from "./match-intelligence-repository.js";
 import { setProviderDiagnostic } from "./provider-diagnostics.js";
-import type { SportmonksMatchIntelligenceProvider } from "./sportmonks-match-intelligence-provider.js";
+import type { MatchIntelligenceDataProvider } from "./match-intelligence-provider.js";
 
 export interface MatchIntelligenceStatus {
   enabled: boolean;
@@ -43,7 +43,7 @@ export class MatchIntelligenceService {
   };
 
   constructor(
-    private readonly provider: SportmonksMatchIntelligenceProvider,
+    private readonly provider: MatchIntelligenceDataProvider,
     private readonly repository: MatchIntelligenceSnapshotRepository,
     private readonly options: { cacheMinutes: number; minSample: number },
   ) { this.engine = new MatchIntelligenceEngine(options.minSample); }
