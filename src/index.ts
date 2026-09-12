@@ -27,6 +27,8 @@ import { createServer } from "./server.js";
 import { sendTelegramStartupMessage } from "./telegram-health.js";
 import { SportmonksHistoricalBackfill } from "./sportmonks-historical-backfill.js";
 import { SportmonksMatchIntelligenceProvider } from "./sportmonks-match-intelligence-provider.js";
+import { FootballDataMatchIntelligenceProvider } from "./football-data-match-intelligence-provider.js";
+import { MultiSourceMatchIntelligenceProvider } from "./multi-source-match-intelligence-provider.js";
 
 // Railway gibi platformlarda Start Command bazen package.json'daki bootstrap'i
 // atlayip dogrudan dist/index.js calistirabiliyor. OAuth duzeltmesini burada da
@@ -84,11 +86,21 @@ try {
     ? new PostgresMatchIntelligenceSnapshotRepository(config.databaseUrl)
     : new MemoryMatchIntelligenceSnapshotRepository();
   const matchIntelligence = config.matchIntelligenceEnabled && config.sportmonksToken
-    ? new MatchIntelligenceService(new SportmonksMatchIntelligenceProvider({
-        apiToken: config.sportmonksToken,
-        recentMatches: config.matchIntelligenceRecentMatches,
-        fixtureMatchToleranceMinutes: config.sportmonksFixtureMatchToleranceMinutes,
-      }), matchIntelligenceRepository, {
+    ? new MatchIntelligenceService(new MultiSourceMatchIntelligenceProvider(
+        new SportmonksMatchIntelligenceProvider({
+          apiToken: config.sportmonksToken,
+          recentMatches: config.matchIntelligenceRecentMatches,
+          fixtureMatchToleranceMinutes: config.sportmonksFixtureMatchToleranceMinutes,
+        }),
+        config.footballDataToken
+          ? new FootballDataMatchIntelligenceProvider({
+              apiToken: config.footballDataToken,
+              recentMatches: config.matchIntelligenceRecentMatches,
+              fixtureMatchToleranceMinutes: config.footballDataFixtureMatchToleranceMinutes,
+            })
+          : undefined,
+        config.matchIntelligenceMinSample,
+      ), matchIntelligenceRepository, {
         cacheMinutes: config.matchIntelligenceCacheMinutes,
         minSample: config.matchIntelligenceMinSample,
       })
@@ -123,6 +135,7 @@ try {
       historicalStorage: historicalRepository.storage,
       historicalMinSampleSize: config.historicalMinSampleSize,
       matchIntelligenceEnabled: Boolean(matchIntelligence),
+      matchIntelligenceFootballDataFallback: Boolean(config.footballDataToken),
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
     });
