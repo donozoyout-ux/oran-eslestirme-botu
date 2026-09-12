@@ -47,7 +47,7 @@ export class SportmonksMatchIntelligenceProvider {
     const resolution = await this.resolver.resolve(target, signal);
     if (resolution.status !== "resolved" || !resolution.sportmonksFixtureId) {
       return {
-        input: { target, homeTeamId: target.homeTeam, awayTeamId: target.awayTeam, observations: [], capabilityMap: capabilities },
+        input: { target, homeTeamId: target.homeTeam, awayTeamId: target.awayTeam, observations: [], capabilityMap: capabilities, sources: ["sportmonks"] },
         rateLimitRemaining: this.remaining,
         rateLimitResetSeconds: this.resetSeconds,
         resolution,
@@ -60,7 +60,7 @@ export class SportmonksMatchIntelligenceProvider {
     const teams = this.teams(targetFixture);
     if (!teams.homeId || !teams.awayId) {
       return { input: { target, homeTeamId: teams.homeId ?? target.homeTeam, awayTeamId: teams.awayId ?? target.awayTeam,
-        observations: [], capabilityMap: capabilities }, rateLimitRemaining: this.remaining, rateLimitResetSeconds: this.resetSeconds, resolution };
+        observations: [], capabilityMap: capabilities, sources: ["sportmonks"] }, rateLimitRemaining: this.remaining, rateLimitResetSeconds: this.resetSeconds, resolution };
     }
 
     const cutoff = new Date(Math.min(Date.parse(target.commenceTime) - 1, Date.now())).toISOString().slice(0, 10);
@@ -91,7 +91,7 @@ export class SportmonksMatchIntelligenceProvider {
           ? undefined : String((targetFixture.league as Record<string, unknown>).id),
         targetSeasonId: targetFixture.season_id === undefined ? undefined : String(targetFixture.season_id),
         observations: [...observations.values()].sort((a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff))
-          .slice(0, this.options.recentMatches * 3), capabilityMap: capabilities },
+          .slice(0, this.options.recentMatches * 3), capabilityMap: capabilities, sources: ["sportmonks"] },
       rateLimitRemaining: this.remaining,
       rateLimitResetSeconds: this.resetSeconds,
       resolution,
