@@ -55,9 +55,14 @@ describe("SportmonksMatchIntelligenceProvider", () => {
       if (url.pathname.includes("/fixtures/between/")) return new Response(JSON.stringify({ data: [recent] }), { status: 200 });
       return new Response(JSON.stringify({ message: "unavailable" }), { status: 403 });
     }));
+    const fetchMock = vi.mocked(fetch);
     const result = await new SportmonksMatchIntelligenceProvider({ apiToken: "secret", recentMatches: 10,
       baseUrl: "https://sportmonks.test" }).fetch(target);
     expect(result.input.capabilityMap).toMatchObject({ fixtures: "available", fixtureStats: "available", events: "available", xg: "available" });
+    const historyUrls = fetchMock.mock.calls.map(([input]) => new URL(String(input))).filter((url) => url.pathname.includes("/fixtures/between/"));
+    expect(historyUrls.length).toBeGreaterThan(0);
+    expect(historyUrls.every((url) => url.searchParams.get("order") === "desc")).toBe(true);
+    expect(historyUrls.every((url) => url.searchParams.get("per_page") === "50")).toBe(true);
     expect(result.input.observations[0]).toMatchObject({ sourceEventId: "90", reportedHomeScore: 2, reportedAwayScore: 1,
       statistics: expect.arrayContaining([expect.objectContaining({ teamId: "1", xg: 2.1 })]) });
   });
@@ -79,6 +84,26 @@ describe("MatchIntelligenceService", () => {
     expect(await repository.count()).toBe(1);
     expect(first.results[0]?.canonicalEventId).toBe("canonical-100");
     expect(second).toMatchObject({ cacheSize: 1, snapshotsStored: 1, rateLimitRemaining: 100 });
+  });
+
+
+  it("ayni canonical mac icin SportMonks native fixture'i scraper fixture'ina tercih eder", async () => {
+    const scraperTarget = { ...target, provider: "betexplorer_scraper", sourceEventId: "scraper-100" };
+    const sportmonksTarget = { ...target, provider: "sportmonks", sourceEventId: "100" };
+    let receivedSourceId = "";
+    const capabilityMap: MatchIntelligenceInput["capabilityMap"] = { fixtures: "available", teamStats: "unavailable",
+      fixtureStats: "unavailable", events: "unavailable", lineups: "unavailable", injuries: "unavailable", xg: "unavailable" };
+    const provider = { fetch: async (fixture: typeof target) => {
+      receivedSourceId = fixture.sourceEventId;
+      return { input: { target: fixture, homeTeamId: "1", awayTeamId: "2", observations: [], capabilityMap },
+        rateLimitRemaining: 100, rateLimitResetSeconds: 60,
+        resolution: { status: "resolved", sportmonksFixtureId: fixture.sourceEventId, confidence: 100 } };
+    } } as unknown as SportmonksMatchIntelligenceProvider;
+
+    const service = new MatchIntelligenceService(provider, new MemoryMatchIntelligenceSnapshotRepository(), { cacheMinutes: 45, minSample: 5 });
+    await service.refresh([scraperTarget, sportmonksTarget], new Date("2026-09-30T12:00:00.000Z"));
+
+    expect(receivedSourceId).toBe("100");
   });
 
   it("provider hatasi odds disindaki alt sistemi degrade eder", async () => {

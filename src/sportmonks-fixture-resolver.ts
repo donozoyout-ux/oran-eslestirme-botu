@@ -1,7 +1,7 @@
 import type { MatchFixture } from "./domain.js";
 import { CanonicalMatchResolver } from "./canonical-match-resolver.js";
 
-interface Envelope { data?: unknown[]; }
+interface Envelope { data?: unknown[]; pagination?: { has_more?: boolean; current_page?: number; next_page?: string | null } }
 interface CandidateFixture {
   id?: number;
   starting_at?: string;
@@ -40,6 +40,7 @@ function teamNames(row: CandidateFixture): { home?: string; away?: string } {
 
 export class SportmonksFixtureResolver {
   private readonly normalizer = new CanonicalMatchResolver({ kickoffToleranceMinutes: 60 });
+  private readonly dateCache = new Map<string, { expiresAt: number; fixtures: CandidateFixture[] }>();
 
   constructor(private readonly options: {
     apiToken: string;
@@ -56,20 +57,18 @@ export class SportmonksFixtureResolver {
     const targetKickoff = Date.parse(target.commenceTime);
     if (!Number.isFinite(targetKickoff)) return { status: "not_found", confidence: 0, error: "invalid_target_kickoff" };
 
-    const dates = [-1, 0, 1].map((offset) => new Date(targetKickoff + offset * 86_400_000).toISOString().slice(0, 10));
-    const candidates: CandidateFixture[] = [];
-    try {
-      for (const date of dates) candidates.push(...await this.fetchDate(date, signal));
-    } catch (error) {
-      return { status: "not_found", confidence: 0, error: error instanceof Error ? error.message : String(error) };
-    }
-
+    const dates = [0, -1, 1].map((offset) => new Date(targetKickoff + offset * 86_400_000).toISOString().slice(0, 10));
     const home = this.normalizer.normalizeTeam(target.homeTeam);
     const away = this.normalizer.normalizeTeam(target.awayTeam);
     const league = this.normalizer.normalizeLeague(target.leagueName);
     const toleranceMs = Math.max(1, this.options.toleranceMinutes) * 60_000;
+    const candidates: CandidateFixture[] = [];
+    let matches: Array<{ id: string; differenceMinutes: number; confidence: number; leagueMatched: boolean }> = [];
 
-    const matches = candidates.flatMap((row) => {
+    try {
+      for (const date of dates) {
+        candidates.push(...await this.fetchDate(date, signal));
+        matches = candidates.flatMap((row) => {
       const id = row.id;
       const kickoff = kickoffIso(row);
       const teams = teamNames(row);
@@ -83,7 +82,12 @@ export class SportmonksFixtureResolver {
       const differenceMinutes = difference / 60_000;
       const confidence = Math.max(50, Math.round(100 - (differenceMinutes / Math.max(1, this.options.toleranceMinutes)) * 35 - (leagueMatched ? 0 : 10)));
       return [{ id: String(id), differenceMinutes, confidence, leagueMatched }];
-    }).sort((a, b) => Number(b.leagueMatched) - Number(a.leagueMatched) || a.differenceMinutes - b.differenceMinutes || b.confidence - a.confidence || a.id.localeCompare(b.id));
+        }).sort((a, b) => Number(b.leagueMatched) - Number(a.leagueMatched) || a.differenceMinutes - b.differenceMinutes || b.confidence - a.confidence || a.id.localeCompare(b.id));
+        if (matches.length > 0) break;
+      }
+    } catch (error) {
+      return { status: "not_found", confidence: 0, error: error instanceof Error ? error.message : String(error) };
+    }
 
     if (!matches.length) return { status: "not_found", confidence: 0 };
     const best = matches[0]!;
@@ -95,22 +99,36 @@ export class SportmonksFixtureResolver {
   }
 
   private async fetchDate(date: string, parentSignal?: AbortSignal): Promise<CandidateFixture[]> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.requestTimeoutMs ?? 12_000);
-    const abort = () => controller.abort();
-    parentSignal?.addEventListener("abort", abort, { once: true });
-    try {
-      const url = new URL(`${this.options.baseUrl ?? "https://api.sportmonks.com/v3/football"}/fixtures/date/${encodeURIComponent(date)}`);
-      url.searchParams.set("include", "participants;league");
-      url.searchParams.set("per_page", "50");
-      const response = await fetch(url, { headers: { Authorization: this.options.apiToken, Accept: "application/json" }, signal: controller.signal });
-      const text = await response.text();
-      if (!response.ok) throw new Error(`SportMonks fixture resolver ${response.status}: ${text.slice(0, 240)}`);
-      const parsed = JSON.parse(text) as Envelope;
-      return Array.isArray(parsed.data) ? parsed.data as CandidateFixture[] : [];
-    } finally {
-      clearTimeout(timeout);
-      parentSignal?.removeEventListener("abort", abort);
+    const cached = this.dateCache.get(date);
+    if (cached && cached.expiresAt > Date.now()) return [...cached.fixtures];
+
+    const fixtures: CandidateFixture[] = [];
+    for (let page = 1; page <= 8; page += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.options.requestTimeoutMs ?? 12_000);
+      const abort = () => controller.abort();
+      parentSignal?.addEventListener("abort", abort, { once: true });
+      try {
+        const url = new URL(`${this.options.baseUrl ?? "https://api.sportmonks.com/v3/football"}/fixtures/date/${encodeURIComponent(date)}`);
+        url.searchParams.set("include", "participants;league");
+        url.searchParams.set("per_page", "50");
+        url.searchParams.set("page", String(page));
+        const response = await fetch(url, {
+          headers: { Authorization: this.options.apiToken, Accept: "application/json" },
+          signal: controller.signal,
+        });
+        const text = await response.text();
+        if (!response.ok) throw new Error(`SportMonks fixture resolver ${response.status}: ${text.slice(0, 240)}`);
+        const parsed = JSON.parse(text) as Envelope;
+        if (Array.isArray(parsed.data)) fixtures.push(...parsed.data as CandidateFixture[]);
+        if (!parsed.pagination?.has_more) break;
+      } finally {
+        clearTimeout(timeout);
+        parentSignal?.removeEventListener("abort", abort);
+      }
     }
+
+    this.dateCache.set(date, { expiresAt: Date.now() + 15 * 60_000, fixtures: [...fixtures] });
+    return fixtures;
   }
 }

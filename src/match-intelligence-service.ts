@@ -56,13 +56,23 @@ export class MatchIntelligenceService {
 
   private async executeRefresh(fixtures: MatchFixture[], now: Date): Promise<MatchIntelligenceStatus> {
     this.statusValue.lastRunAt = now.toISOString();
-    const seenTargets = new Set<string>();
-    const targets = fixtures.filter((fixture): fixture is MatchFixture & { canonicalEventId: string } => {
-      if (fixture.phase !== "prematch" || !fixture.canonicalEventId || Date.parse(fixture.commenceTime) <= now.getTime()) return false;
-      if (seenTargets.has(fixture.canonicalEventId)) return false;
-      seenTargets.add(fixture.canonicalEventId);
-      return true;
-    });
+    const providerPriority = (fixture: MatchFixture): number => {
+      if (fixture.provider === "sportmonks") return 40;
+      if (fixture.provider === "football_data") return 30;
+      if (fixture.provider === "api_football") return 20;
+      return 10;
+    };
+    const preferredTargets = new Map<string, MatchFixture & { canonicalEventId: string }>();
+    for (const fixture of fixtures) {
+      if (fixture.phase !== "prematch" || !fixture.canonicalEventId || Date.parse(fixture.commenceTime) <= now.getTime()) continue;
+      const candidate = fixture as MatchFixture & { canonicalEventId: string };
+      const current = preferredTargets.get(candidate.canonicalEventId);
+      if (!current || providerPriority(candidate) > providerPriority(current)) {
+        preferredTargets.set(candidate.canonicalEventId, candidate);
+      }
+    }
+    const targets = [...preferredTargets.values()]
+      .sort((a, b) => Date.parse(a.commenceTime) - Date.parse(b.commenceTime));
     this.statusValue.targetsSeen = targets.length;
     this.statusValue.targetsResolved = 0;
     this.statusValue.targetsNotFound = 0;
