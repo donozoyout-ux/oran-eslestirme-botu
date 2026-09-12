@@ -40,6 +40,7 @@ function teamNames(row: CandidateFixture): { home?: string; away?: string } {
 
 export class SportmonksFixtureResolver {
   private readonly normalizer = new CanonicalMatchResolver({ kickoffToleranceMinutes: 60 });
+  private readonly dateCache = new Map<string, { expiresAt: number; fixtures: CandidateFixture[] }>();
 
   constructor(private readonly options: {
     apiToken: string;
