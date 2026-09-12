@@ -69,14 +69,15 @@ export class SportmonksMatchIntelligenceProvider {
     for (const teamId of [teams.homeId, teams.awayId]) {
       if (this.remaining === 0) break;
       const basePath = `/fixtures/between/${start}/${cutoff}/${teamId}`;
-      const fixtureData = await this.optionalCapability(`${basePath}?include=participants;scores;league`, "fixtures", capabilities, signal);
+      const commonQuery = "order=desc&per_page=50";
+      const fixtureData = await this.optionalCapability(`${basePath}?${commonQuery}&include=participants;scores;league`, "fixtures", capabilities, signal);
       for (const row of this.rows(fixtureData)) {
         const mapped = this.mapFixture(row, target.commenceTime);
         if (mapped) observations.set(mapped.sourceEventId, mapped);
       }
-      const eventsData = await this.optionalCapability(`${basePath}?include=participants;scores;league;events`, "events", capabilities, signal);
+      const eventsData = await this.optionalCapability(`${basePath}?${commonQuery}&include=participants;scores;league;events`, "events", capabilities, signal);
       this.mergeEnrichment(observations, this.rows(eventsData), target.commenceTime, "events");
-      const statsData = await this.optionalCapability(`${basePath}?include=participants;scores;league;statistics.type`, "fixtureStats", capabilities, signal);
+      const statsData = await this.optionalCapability(`${basePath}?${commonQuery}&include=participants;scores;league;statistics.type`, "fixtureStats", capabilities, signal);
       this.mergeEnrichment(observations, this.rows(statsData), target.commenceTime, "statistics");
       await this.optionalCapability(`/teams/${teamId}?include=statistics.details.type`, "teamStats", capabilities, signal);
       await this.optionalCapability(`/sidelined/team/${teamId}`, "injuries", capabilities, signal);
