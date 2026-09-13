@@ -89,11 +89,18 @@ export interface MonitorStatus {
   recentQuotesUpdatedAt: string | null;
   recentMatchesUpdatedAt: string | null;
   recentQuotes: Array<{
+    provider: string;
+    sourceEventId: string;
+    canonicalEventId?: string;
     event: string;
+    commenceTime: string;
     phase: "prematch" | "live";
+    marketKey: string;
     market: string;
+    selectionKey: string;
     selection: string;
     line: number | null;
+    bookmakerKey: string;
     bookmaker: string;
     price: number;
     updatedAt: string;
@@ -458,12 +465,19 @@ export class OddsMonitor {
       this.statusValue.lastRun = summary;
 
       if (comparison.freshQuotes.length > 0) {
-        this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 40).map((quote) => ({
+        this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 120).map((quote) => ({
+          provider: quote.provider,
+          sourceEventId: quote.sourceEventId,
+          ...(quote.canonicalEventId ? { canonicalEventId: quote.canonicalEventId } : {}),
           event: `${quote.homeTeam} - ${quote.awayTeam}`,
+          commenceTime: quote.commenceTime,
           phase: quote.phase,
+          marketKey: quote.marketKey,
           market: quote.marketName,
+          selectionKey: quote.selectionKey,
           selection: quote.selectionName,
           line: quote.line,
+          bookmakerKey: quote.bookmakerKey,
           bookmaker: quote.bookmakerName,
           price: quote.price,
           updatedAt: quote.updatedAt,
