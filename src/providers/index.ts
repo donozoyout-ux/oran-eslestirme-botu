@@ -61,7 +61,6 @@ function mackolikIddaaProvider(config: AppConfig): MackolikIddaaProvider {
   return new MackolikIddaaProvider({
     maxMatches: config.turkishOddsMaxMatches,
     requestTimeoutMs: config.scraperPageTimeoutMs,
-    executablePath: config.chromiumExecutablePath,
   });
 }
 
