@@ -1,25 +1,18 @@
 import { createHash } from "node:crypto";
-import { load } from "cheerio";
 import type { MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
 import { setProviderDiagnostic } from "../provider-diagnostics.js";
 
-const SOURCE_URL = "https://www.mackolik.com/iddaa";
+const SOURCE_PAGE = "https://arsiv.mackolik.com/Genis-Iddaa-Programi";
+const DATA_ENDPOINT = "https://arsiv.mackolik.com/AjaxHandlers/ProgramDataHandler.ashx";
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36";
-const MAX_HTML_BYTES = 2_000_000;
+const MAX_DATA_BYTES = 4_000_000;
 
 export interface MackolikIddaaProviderOptions {
   maxMatches?: number;
   requestTimeoutMs?: number;
 }
 
-interface ParsedRow {
-  eventId: string;
-  leagueName: string;
-  homeTeam: string;
-  awayTeam: string;
-  commenceTime: string;
-  prices: number[];
-}
+type LegacyValue = null | boolean | number | string | LegacyValue[] | { [key: string]: LegacyValue };
 
 function normalizeSpace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -36,6 +29,17 @@ function turkeyIso(dateText: string, timeText: string): string | null {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
+function istanbulDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Istanbul",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${pick("day")}.${pick("month")}.${pick("year")}`;
+}
+
 function stableEventId(dateText: string, timeText: string, homeTeam: string, awayTeam: string): string {
   return createHash("sha256")
     .update([dateText, timeText, homeTeam, awayTeam].join("|"))
@@ -43,110 +47,127 @@ function stableEventId(dateText: string, timeText: string, homeTeam: string, awa
     .slice(0, 20);
 }
 
-function priceValues(text: string): number[] {
-  const matches = text.match(/\b\d+[.,]\d{2}\b/g) ?? [];
-  return matches
-    .map((value) => Number(value.replace(",", ".")))
-    .filter((value) => Number.isFinite(value) && value > 1 && value < 100);
+function numeric(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value > 1 ? value : null;
+  if (typeof value !== "string") return null;
+  const parsed = Number(value.trim().replace(",", "."));
+  return Number.isFinite(parsed) && parsed > 1 ? parsed : null;
 }
 
-function teamLinks($: ReturnType<typeof load>, element: Parameters<ReturnType<typeof load>>[0]): string[] {
-  const values: string[] = [];
-  $(element).find("a").each((_index, anchor) => {
-    const value = normalizeSpace($(anchor).text());
-    if (!/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(value)) return;
-    if (value.length < 2 || value.length > 80) return;
-    if (/^(detay|istatistik|tahmin|canlı|canli|oran|kupon)$/i.test(value)) return;
-    if (!values.includes(value)) values.push(value);
-  });
-  return values;
-}
+function toJsonCompatible(input: string): string {
+  let out = "";
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
 
-export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuote[] {
-  const $ = load(html);
-  const headingText = normalizeSpace($("h1,h2,h3,time").map((_index, element) => $(element).text()).get().join(" "));
-  const dateText = headingText.match(/\b\d{1,2}\.\d{1,2}\.\d{4}\b/)?.[0]
-    ?? new Intl.DateTimeFormat("tr-TR", {
-      timeZone: "Europe/Istanbul",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(now);
-
-  const rows: ParsedRow[] = [];
-  const seen = new Set<string>();
-
-  $("tr,[role='row']").each((_index, element) => {
-    const cells = $(element).find("th,td").map((_cellIndex, cell) => normalizeSpace($(cell).text())).get();
-    const rawText = normalizeSpace(cells.length ? cells.join(" ") : $(element).text());
-    const prices = priceValues(rawText);
-    if (prices.length < 3) return;
-
-    const teams = teamLinks($, element);
-    if (teams.length < 2) return;
-    const homeTeam = teams[0]!;
-    const awayTeam = teams[1]!;
-
-    let timeText = rawText.match(/\b\d{1,2}:\d{2}\b/)?.[0] ?? "";
-    if (!timeText) {
-      const current = $(element);
-      current.prevAll().slice(0, 8).each((_i, previous) => {
-        if (timeText) return;
-        const previousCells = $(previous).find("th,td").map((_cellIndex, cell) => normalizeSpace($(cell).text())).get();
-        const previousText = normalizeSpace(previousCells.length ? previousCells.join(" ") : $(previous).text());
-        timeText = previousText.match(/\b\d{1,2}:\d{2}\b/)?.[0] ?? "";
-      });
+  for (let index = 0; index < input.length; index += 1) {
+    const ch = input[index]!;
+    if (quote) {
+      if (escaped) {
+        if (quote === "'" && ch === "'") out += "'";
+        else if (ch === '"') out += '\\"';
+        else out += `\\${ch}`;
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === quote) {
+        out += '"';
+        quote = null;
+        continue;
+      }
+      if (quote === "'" && ch === '"') out += '\\"';
+      else out += ch;
+      continue;
     }
-    if (!timeText) return;
 
-    const commenceTime = turkeyIso(dateText, timeText);
-    if (!commenceTime) return;
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += '"';
+      continue;
+    }
+    out += ch;
+  }
+  if (quote) throw new Error("Mackolik payload icinde kapanmayan string var.");
 
-    const eventId = stableEventId(dateText, timeText, homeTeam, awayTeam);
-    if (seen.has(eventId)) return;
-    seen.add(eventId);
+  return out.replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$]*)(\s*:)/g, '$1"$2"$3');
+}
 
-    const homeIndex = rawText.indexOf(homeTeam);
-    let prefix = homeIndex > 0 ? rawText.slice(0, homeIndex) : "";
-    prefix = normalizeSpace(prefix.replace(timeText, "").replace(/^[-–—|\s]+/, ""));
-    const leagueName = prefix || "İddaa Bülteni";
+export function parseMackolikLegacyPayload(text: string): LegacyValue {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Mackolik bos payload dondurdu.");
+  try {
+    return JSON.parse(trimmed) as LegacyValue;
+  } catch {
+    return JSON.parse(toJsonCompatible(trimmed)) as LegacyValue;
+  }
+}
 
-    rows.push({
-      eventId,
-      leagueName,
-      homeTeam,
-      awayTeam,
-      commenceTime,
-      prices: prices.slice(0, 8),
-    });
-  });
+function collectMatchRows(value: LegacyValue, result: LegacyValue[][] = []): LegacyValue[][] {
+  if (Array.isArray(value)) {
+    if (
+      value.length >= 27
+      && typeof value[1] === "string"
+      && typeof value[3] === "string"
+      && typeof value[6] === "string"
+      && typeof value[7] === "string"
+    ) {
+      result.push(value);
+      return result;
+    }
+    for (const item of value) collectMatchRows(item, result);
+    return result;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectMatchRows(item, result);
+  }
+  return result;
+}
 
+export function parseMackolikProgramPayload(text: string, now = new Date()): OddsQuote[] {
+  const payload = parseMackolikLegacyPayload(text);
+  const rows = collectMatchRows(payload);
   const updatedAt = now.toISOString();
   const quotes: OddsQuote[] = [];
+
   for (const row of rows) {
+    const homeTeam = normalizeSpace(String(row[1] ?? ""));
+    const awayTeam = normalizeSpace(String(row[3] ?? ""));
+    const timeText = normalizeSpace(String(row[6] ?? ""));
+    const dateText = normalizeSpace(String(row[7] ?? ""));
+    const leagueName = normalizeSpace(String(row[26] ?? "İddaa Bülteni")) || "İddaa Bülteni";
+    if (!homeTeam || !awayTeam || !timeText || !dateText) continue;
+
+    const commenceTime = turkeyIso(dateText, timeText);
+    if (!commenceTime) continue;
+
+    const rawId = String(row[0] ?? row[10] ?? "").trim();
+    const eventId = rawId || stableEventId(dateText, timeText, homeTeam, awayTeam);
     const common = {
       provider: "mackolik_iddaa",
       bookmakerKey: "iddaa",
       bookmakerName: "İddaa (Mackolik)",
-      sourceEventId: row.eventId,
+      sourceEventId: eventId,
       sportKey: "soccer",
-      leagueName: row.leagueName,
-      homeTeam: row.homeTeam,
-      awayTeam: row.awayTeam,
-      commenceTime: row.commenceTime,
+      leagueName,
+      homeTeam,
+      awayTeam,
+      commenceTime,
       phase: "prematch" as const,
       period: "full_time" as const,
       updatedAt,
-      sourceUrl: SOURCE_URL,
+      sourceUrl: SOURCE_PAGE,
     };
 
     const winnerSelections = [
-      { key: "home", name: "1", price: row.prices[0] },
-      { key: "draw", name: "X", price: row.prices[1] },
-      { key: "away", name: "2", price: row.prices[2] },
+      { key: "home", name: "1", price: numeric(row[16]) },
+      { key: "draw", name: "X", price: numeric(row[17]) },
+      { key: "away", name: "2", price: numeric(row[18]) },
     ];
     for (const selection of winnerSelections) {
-      if (!selection.price) continue;
+      if (selection.price === null) continue;
       quotes.push({
         ...common,
         marketKey: "match_winner_3way",
@@ -159,12 +180,12 @@ export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuot
     }
 
     const doubleChance = [
-      { key: "home_or_draw", name: "1-X", price: row.prices[3] },
-      { key: "home_or_away", name: "1-2", price: row.prices[4] },
-      { key: "draw_or_away", name: "X-2", price: row.prices[5] },
+      { key: "home_or_draw", name: "1-X", price: numeric(row[19]) },
+      { key: "home_or_away", name: "1-2", price: numeric(row[20]) },
+      { key: "draw_or_away", name: "X-2", price: numeric(row[21]) },
     ];
     for (const selection of doubleChance) {
-      if (!selection.price) continue;
+      if (selection.price === null) continue;
       quotes.push({
         ...common,
         marketKey: "double_chance",
@@ -177,11 +198,11 @@ export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuot
     }
 
     const totals = [
-      { key: "under", name: "Alt", price: row.prices[6] },
-      { key: "over", name: "Üst", price: row.prices[7] },
+      { key: "under", name: "Alt", price: numeric(row[22]) },
+      { key: "over", name: "Üst", price: numeric(row[23]) },
     ];
     for (const selection of totals) {
-      if (!selection.price) continue;
+      if (selection.price === null) continue;
       quotes.push({
         ...common,
         marketKey: "total_goals",
@@ -205,59 +226,45 @@ export class MackolikIddaaProvider implements OddsProvider {
 
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const startedAt = new Date();
-    const mode = "http";
-    let html = "";
+    const day = istanbulDate(startedAt);
+    let quotes: OddsQuote[] = [];
+    let fetchError: string | null = null;
 
     try {
+      const url = new URL(DATA_ENDPOINT);
+      url.searchParams.set("type", "6");
+      url.searchParams.set("sortValue", "DATE");
+      url.searchParams.set("day", day);
+      url.searchParams.set("sort", "-1");
+      url.searchParams.set("sortDir", "-1");
+      url.searchParams.set("groupId", "-1");
+      url.searchParams.set("np", "1");
+      url.searchParams.set("sport", "1");
+
       const timeout = AbortSignal.timeout(this.options.requestTimeoutMs ?? 20_000);
       const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-      const response = await fetch(SOURCE_URL, {
+      const response = await fetch(url, {
         headers: {
-          accept: "text/html,application/xhtml+xml",
+          accept: "*/*",
           "accept-language": "tr-TR,tr;q=0.9,en;q=0.7",
           "user-agent": USER_AGENT,
+          "x-requested-with": "XMLHttpRequest",
+          referer: SOURCE_PAGE,
         },
         redirect: "follow",
         signal: requestSignal,
       });
-      if (response.ok) {
-        const contentLength = Number(response.headers.get("content-length") ?? 0);
-        if (contentLength > MAX_HTML_BYTES) {
-          throw new Error("Mackolik İddaa sayfasi beklenenden buyuk.");
-        }
-        const reader = response.body?.getReader();
-        if (reader) {
-          const decoder = new TextDecoder();
-          let total = 0;
-          const chunks: string[] = [];
-          try {
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              total += value.byteLength;
-              if (total > MAX_HTML_BYTES) {
-                await reader.cancel();
-                throw new Error("Mackolik İddaa sayfasi beklenenden buyuk.");
-              }
-              chunks.push(decoder.decode(value, { stream: true }));
-            }
-            chunks.push(decoder.decode());
-            html = chunks.join("");
-          } finally {
-            reader.releaseLock();
-          }
-        } else {
-          html = await response.text();
-          if (Buffer.byteLength(html, "utf8") > MAX_HTML_BYTES) {
-            throw new Error("Mackolik İddaa sayfasi beklenenden buyuk.");
-          }
-        }
-      }
-    } catch {
-      html = "";
-    }
+      if (!response.ok) throw new Error(`Mackolik arsiv endpointi ${response.status} dondurdu.`);
 
-    let quotes = html ? parseMackolikIddaaHtml(html, new Date()) : [];
+      const contentLength = Number(response.headers.get("content-length") ?? 0);
+      if (contentLength > MAX_DATA_BYTES) throw new Error("Mackolik arsiv payload'u beklenenden buyuk.");
+      const body = await response.text();
+      if (Buffer.byteLength(body, "utf8") > MAX_DATA_BYTES) throw new Error("Mackolik arsiv payload'u beklenenden buyuk.");
+      quotes = parseMackolikProgramPayload(body, startedAt);
+    } catch (error) {
+      fetchError = error instanceof Error ? error.message : String(error);
+      quotes = [];
+    }
 
     const eventOrder = [...new Set(quotes.map((quote) => quote.sourceEventId))]
       .map((eventId) => ({
@@ -290,13 +297,13 @@ export class MackolikIddaaProvider implements OddsProvider {
     setProviderDiagnostic("mackolik_iddaa", {
       enabled: true,
       status: quotes.length > 0 ? "ok" : "empty",
-      mode,
+      mode: "archive_ajax",
       fixtureCount: this.lastFixtures.length,
       quoteCount: quotes.length,
       lastProviderRunAt: startedAt.toISOString(),
       lastSuccessAt: quotes.length > 0 ? new Date().toISOString() : null,
-      lastError: quotes.length > 0 ? null : "Mackolik İddaa bülteninde HTTP üzerinden parse edilebilir oran bulunamadı.",
-      source: "https://www.mackolik.com/iddaa",
+      lastError: quotes.length > 0 ? null : (fetchError ?? "Mackolik arsiv İddaa akışında parse edilebilir oran bulunamadı."),
+      source: SOURCE_PAGE,
     });
 
     return quotes;
@@ -305,5 +312,4 @@ export class MackolikIddaaProvider implements OddsProvider {
   getLastFixtures(): MatchFixture[] {
     return [...this.lastFixtures];
   }
-
 }
