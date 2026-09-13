@@ -78,7 +78,8 @@ export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuot
   const seen = new Set<string>();
 
   $("tr,[role='row'],li").each((_index, element) => {
-    const rawText = normalizeSpace($(element).text());
+    const cells = $(element).find("th,td").map((_cellIndex, cell) => normalizeSpace($(cell).text())).get();
+    const rawText = normalizeSpace(cells.length ? cells.join(" ") : $(element).text());
     const prices = priceValues(rawText);
     if (prices.length < 3) return;
 
@@ -92,7 +93,9 @@ export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuot
       const current = $(element);
       current.prevAll().slice(0, 8).each((_i, previous) => {
         if (timeText) return;
-        timeText = normalizeSpace($(previous).text()).match(/\b\d{1,2}:\d{2}\b/)?.[0] ?? "";
+        const previousCells = $(previous).find("th,td").map((_cellIndex, cell) => normalizeSpace($(cell).text())).get();
+        const previousText = normalizeSpace(previousCells.length ? previousCells.join(" ") : $(previous).text());
+        timeText = previousText.match(/\b\d{1,2}:\d{2}\b/)?.[0] ?? "";
       });
     }
     if (!timeText) return;
