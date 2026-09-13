@@ -103,6 +103,7 @@ export interface Notifier {
   readonly name: string;
   send(match: OddsMatch): Promise<void>;
   sendAnalysisSignal?(signal: OddsAnalysisSignal): Promise<void>;
+  sendOddsSnapshot?(quotes: OddsQuote[]): Promise<void>;
 }
 
 export interface AlertStore {
