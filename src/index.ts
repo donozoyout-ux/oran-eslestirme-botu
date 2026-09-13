@@ -113,6 +113,7 @@ try {
     prematchAlertMinSources: config.prematchAlertMinSources,
     prematchAlertMinConfidence: config.prematchAlertMinConfidence,
     eventKickoffToleranceMinutes: config.eventKickoffToleranceMinutes,
+    turkishOddsTelegramEnabled: config.turkishOddsTelegramEnabled,
   }, dailySheet, historicalArchive, matchIntelligence);
   const server = createServer(monitor, config.adminToken);
 
@@ -138,6 +139,8 @@ try {
       matchIntelligenceFootballDataFallback: Boolean(config.footballDataToken),
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
+      turkishOddsTelegramEnabled: config.turkishOddsTelegramEnabled,
+      turkishOddsMaxMatches: config.turkishOddsMaxMatches,
     });
 
     if (!config.dryRun) {

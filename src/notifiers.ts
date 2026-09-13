@@ -1,4 +1,4 @@
-import type { Notifier, OddsAnalysisSignal, OddsMatch } from "./domain.js";
+import type { Notifier, OddsAnalysisSignal, OddsMatch, OddsQuote } from "./domain.js";
 import { logger } from "./logger.js";
 
 function escapeHtml(value: string): string {
@@ -128,6 +128,58 @@ export function formatTelegramAnalysisSignal(signal: OddsAnalysisSignal): string
   ].join("\n");
 }
 
+
+function snapshotSelectionLabel(quote: OddsQuote): string {
+  if (quote.marketKey === "match_winner_3way") {
+    if (quote.selectionKey === "home") return "MS 1";
+    if (quote.selectionKey === "draw") return "MS X";
+    if (quote.selectionKey === "away") return "MS 2";
+  }
+  if (quote.marketKey === "double_chance") {
+    if (quote.selectionKey === "home_or_draw") return "ÇŞ 1-X";
+    if (quote.selectionKey === "home_or_away") return "ÇŞ 1-2";
+    if (quote.selectionKey === "draw_or_away") return "ÇŞ X-2";
+  }
+  if (quote.marketKey === "total_goals") {
+    const line = quote.line === null ? "" : ` ${quote.line}`;
+    if (quote.selectionKey === "under") return `A/U${line} ALT`;
+    if (quote.selectionKey === "over") return `A/U${line} ÜST`;
+  }
+  return `${quote.marketName} · ${quote.selectionName}`;
+}
+
+export function formatTelegramOddsSnapshot(quotes: OddsQuote[]): string {
+  const ordered = [...quotes].sort((a, b) => {
+    const rank = (quote: OddsQuote): number => {
+      if (quote.marketKey === "match_winner_3way") return quote.selectionKey === "home" ? 1 : quote.selectionKey === "draw" ? 2 : 3;
+      if (quote.marketKey === "double_chance") return quote.selectionKey === "home_or_draw" ? 4 : quote.selectionKey === "home_or_away" ? 5 : 6;
+      if (quote.marketKey === "total_goals") return quote.selectionKey === "under" ? 7 : 8;
+      return 20;
+    };
+    return rank(a) - rank(b);
+  }).slice(0, 12);
+  const first = ordered[0];
+  if (!first) return "";
+  const kickoff = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(first.commenceTime));
+  const source = [...new Set(ordered.map((quote) => quote.bookmakerName))].join(" · ");
+  return [
+    "🇹🇷 <b>İDDAA ORAN GÜNCELLEMESİ</b>",
+    "",
+    `⚽ <b>${escapeHtml(first.homeTeam)} – ${escapeHtml(first.awayTeam)}</b>`,
+    `🏆 ${escapeHtml(first.leagueName)}`,
+    `🕒 ${kickoff}`,
+    `📡 Kaynak: <b>${escapeHtml(source)}</b>`,
+    "",
+    ...ordered.map((quote) => `• ${escapeHtml(snapshotSelectionLabel(quote))}: <b>${quote.price.toFixed(2)}</b>`),
+    "",
+    "ℹ️ Bu mesaj oran bilgisidir; bahis sonucu garantisi değildir.",
+  ].join("\n");
+}
+
 export class ConsoleNotifier implements Notifier {
   readonly name = "console";
   async send(match: OddsMatch): Promise<void> {
@@ -135,6 +187,10 @@ export class ConsoleNotifier implements Notifier {
   }
   async sendAnalysisSignal(signal: OddsAnalysisSignal): Promise<void> {
     logger.info("DRY RUN analiz bildirimi", { signalId: signal.id, type: signal.type, event: signal.event, market: signal.market, selection: signal.selection, bookmaker: signal.bookmaker, currentPrice: signal.currentPrice, changePercent: signal.changePercent, confidenceScore: signal.confidenceScore, arbitrageMarginPercent: signal.arbitrageMarginPercent });
+  }
+  async sendOddsSnapshot(quotes: OddsQuote[]): Promise<void> {
+    const first = quotes[0];
+    logger.info("DRY RUN odds snapshot", { event: first ? `${first.homeTeam} - ${first.awayTeam}` : "unknown", quotes: quotes.length });
   }
 }
 
@@ -145,6 +201,10 @@ export class TelegramNotifier implements Notifier {
   async sendAnalysisSignal(signal: OddsAnalysisSignal): Promise<void> {
     if (signal.type === "close_odds") return;
     await this.sendMessage(formatTelegramAnalysisSignal(signal));
+  }
+  async sendOddsSnapshot(quotes: OddsQuote[]): Promise<void> {
+    const message = formatTelegramOddsSnapshot(quotes);
+    if (message) await this.sendMessage(message);
   }
   private async sendMessage(text: string): Promise<void> {
     const response = await fetch(`https://api.telegram.org/bot${this.botToken}/sendMessage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: this.chatId, text, parse_mode: "HTML", disable_web_page_preview: true }), signal: AbortSignal.timeout(10_000) });

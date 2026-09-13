@@ -25,6 +25,8 @@ export interface AppConfig {
   sportmonksMaxPages: number;
   sportmonksIncludeOdds: boolean;
   scraperMaxMatches: number;
+  turkishOddsMaxMatches: number;
+  turkishOddsTelegramEnabled: boolean;
   scraperPageTimeoutMs: number;
   scraperWaitMs: number;
   scraperAllowVisibleBookmakerFallback: boolean;
@@ -156,6 +158,8 @@ export function loadConfig(): AppConfig {
     sportmonksMaxPages: numberValue("SPORTMONKS_MAX_PAGES", 4, { min: 1, max: 20 }),
     sportmonksIncludeOdds: booleanValue("SPORTMONKS_INCLUDE_ODDS", true),
     scraperMaxMatches: numberValue("SCRAPER_MAX_MATCHES", 2, { min: 1, max: 10 }),
+    turkishOddsMaxMatches: numberValue("TURKISH_ODDS_MAX_MATCHES", 12, { min: 1, max: 50 }),
+    turkishOddsTelegramEnabled: booleanValue("TURKISH_ODDS_TELEGRAM_ENABLED", true),
     scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 60_000, { min: 5_000, max: 60_000 }),
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
     scraperAllowVisibleBookmakerFallback: booleanValue("SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK", true),

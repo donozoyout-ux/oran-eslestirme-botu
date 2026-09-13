@@ -11,6 +11,7 @@ import { FootballDataFixtureProvider } from "./football-data-fixture-provider.js
 import { ResilientOddsProvider } from "./resilient-provider.js";
 import { RoleSeparatedOddsProvider } from "./role-separated-provider.js";
 import { SportmonksProvider } from "./sportmonks-provider.js";
+import { MackolikIddaaProvider } from "./mackolik-iddaa-provider.js";
 
 const TRACKED_ODDS_API_SPORT_KEYS = [
   "soccer_epl",
@@ -51,6 +52,15 @@ function betExplorerScraper(config: AppConfig): BetExplorerScraperProvider {
     prematchNearPollMinutes: config.prematchNearPollMinutes,
     prematchFinalPollMinutes: config.prematchFinalPollMinutes,
     livePollMinutes: config.livePollMinutes,
+    executablePath: config.chromiumExecutablePath,
+  });
+}
+
+
+function mackolikIddaaProvider(config: AppConfig): MackolikIddaaProvider {
+  return new MackolikIddaaProvider({
+    maxMatches: config.turkishOddsMaxMatches,
+    requestTimeoutMs: config.scraperPageTimeoutMs,
     executablePath: config.chromiumExecutablePath,
   });
 }
@@ -141,7 +151,7 @@ export function createProvider(config: AppConfig): OddsProvider {
   // Acikca ODDS_PROVIDER=the_odds_api secilirse The Odds API ana kaynak olur.
   // Lig kapsami Big Five + English Championship + UEFA Champions/Conference League.
   if (config.provider === "the_odds_api") {
-    const providers: OddsProvider[] = [theOddsApiProvider(config)];
+    const providers: OddsProvider[] = [theOddsApiProvider(config), mackolikIddaaProvider(config)];
     const apiFootball = apiFootballProvider(config);
     const footballData = footballDataProvider(config);
     const sportmonks = sportmonksProvider(config);
@@ -153,16 +163,19 @@ export function createProvider(config: AppConfig): OddsProvider {
 
   // Normal production gorev paylasimi:
   // Premier League, Championship, La Liga, Bundesliga, Serie A, Ligue 1 + UEFA Champions/Conference League.
-  // 1) BetExplorer scraping: ana prematch + ek live oranlar.
-  // 2) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
-  // 3) Sportmonks: resmi fikstur/skor + abonelik izin veriyorsa prematch/live oranlar.
-  // 4) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
-  // 5) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
+  // 1) Mackolik Iddaa bulteni: Turkiye sabit oranlarini dogrudan toplar.
+  // 2) BetExplorer scraping: ek prematch + live oranlar.
+  // 3) API-Football: gunluk fixture ID katalogu + baslangictan sonra live odds.
+  // 4) Sportmonks: resmi fikstur/skor + abonelik izin veriyorsa prematch/live oranlar.
+  // 5) football-data: gunluk fixture/durum dogrulamasi; odds gorevi yok.
+  // 6) The Odds API: scraper gercekten hata verirse sadece prematch acil yedek.
   const scraper = betExplorerScraper(config);
   const liveApi = apiFootballProvider(config) ?? undefined;
   const footballData = footballDataProvider(config);
   const sportmonks = sportmonksProvider(config);
+  const mackolikIddaa = mackolikIddaaProvider(config);
   const fixtureProviders: OddsProvider[] = [
+    mackolikIddaa,
     ...(sportmonks ? [sportmonks] : []),
     ...(footballData ? [footballData] : []),
   ];
