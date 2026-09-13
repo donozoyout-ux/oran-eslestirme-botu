@@ -18,6 +18,7 @@ export interface MonitorOptions {
   prematchAlertMinSources: number;
   prematchAlertMinConfidence: number;
   eventKickoffToleranceMinutes?: number;
+  turkishOddsTelegramEnabled?: boolean;
 }
 
 function matchAlertState(match: OddsMatch): AlertSignalState {
@@ -271,6 +272,50 @@ export class OddsMonitor {
       let movementAlertsSent = 0;
       let marketAnalysisAlertsSent = 0;
       let alertsSuppressed = 0;
+
+      if (this.options.turkishOddsTelegramEnabled && this.notifier.sendOddsSnapshot) {
+        const groups = new Map<string, typeof comparison.freshQuotes>();
+        for (const quote of comparison.freshQuotes) {
+          if (quote.provider !== "mackolik_iddaa" || quote.phase !== "prematch") continue;
+          const key = quote.canonicalEventId ?? quote.sourceEventId;
+          const rows = groups.get(key) ?? [];
+          rows.push(quote);
+          groups.set(key, rows);
+        }
+        const orderedGroups = [...groups.entries()]
+          .sort((a, b) => Date.parse(a[1][0]?.commenceTime ?? "") - Date.parse(b[1][0]?.commenceTime ?? ""))
+          .slice(0, 6);
+        for (const [eventId, quotesForEvent] of orderedGroups) {
+          const sorted = [...quotesForEvent].sort((a, b) =>
+            [a.marketKey, a.selectionKey, a.line ?? 0].join("|").localeCompare([b.marketKey, b.selectionKey, b.line ?? 0].join("|"))
+          );
+          const stateKey = sorted.map((quote) => [quote.marketKey, quote.selectionKey, quote.line ?? "none"].join(":")).join("|");
+          const metrics: Record<string, number> = {};
+          const thresholds: AlertSignalState["thresholds"] = {};
+          sorted.forEach((quote, index) => {
+            metrics[`p${index}`] = quote.price;
+            thresholds[`p${index}`] = { relativePercent: 1 };
+          });
+          const alertId = `turkish-odds:${eventId}`;
+          const snapshotState: AlertSignalState = { stateKey, metrics, thresholds };
+          const now = new Date();
+          if (!this.alertStore.shouldSend(alertId, now, snapshotState)) {
+            alertsSuppressed += 1;
+            continue;
+          }
+          try {
+            await this.notifier.sendOddsSnapshot(sorted);
+            await this.alertStore.markSent(alertId, now, snapshotState);
+            alertsSent += 1;
+          } catch (error) {
+            this.statusValue.totals.errors += 1;
+            logger.warn("Turkiye oran snapshot Telegram bildirimi gonderilemedi.", {
+              eventId,
+              error: errorMessage(error),
+            });
+          }
+        }
+      }
 
       if (this.historicalArchive) {
         try {
