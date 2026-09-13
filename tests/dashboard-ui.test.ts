@@ -9,6 +9,7 @@ describe("production dashboard UI", () => {
     for (const label of [
       "Genel Bakış",
       "Bugünün Maçları",
+      "İddaa Oranları",
       "Takım Analizi",
       "Geçmiş Veri",
       "Oranlar & Piyasa",
@@ -69,13 +70,19 @@ describe("production dashboard UI", () => {
 
   it("maç detay drawerı ve gerekli sekmeleri sunar", () => {
     expect(dashboardShell).toContain('id="matchDrawer"');
-    for (const tab of ["Özet", "Form", "Venue", "Timing", "Stats", "Intelligence"])
+    for (const tab of ["Özet", "Oranlar", "Form", "Venue", "Timing", "Stats", "Intelligence"])
       expect(dashboardShell).toContain(`>${tab}</button>`);
     expect(dashboardClient).toContain("openDrawer(fixture)");
     expect(dashboardClient).toContain("Strength normalization");
     expect(dashboardShell).toContain("Şampiyonlar Ligi");
     expect(dashboardShell).toContain("Konferans Ligi");
     expect(dashboardClient).toContain("data-competition");
+    expect(dashboardShell).toContain('id="page-iddaa"');
+    expect(dashboardShell).toContain('id="iddaaGrid"');
+    expect(dashboardClient).toContain("state.data&&state.data.turkishOdds");
+    expect(dashboardClient).toContain("Mackolik / İddaa");
+    expect(dashboardClient).toContain("renderIddaa()");
+    expect(dashboardStyles).toContain(".iddaa-odds-grid");
   });
 
   it("network hatasında son veriyi korur ve stale uyarısı gösterir", () => {
