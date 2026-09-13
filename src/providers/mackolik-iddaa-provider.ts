@@ -1,16 +1,15 @@
 import { createHash } from "node:crypto";
 import { load } from "cheerio";
-import { chromium, type Browser } from "playwright-core";
 import type { MatchFixture, OddsProvider, OddsQuote } from "../domain.js";
 import { setProviderDiagnostic } from "../provider-diagnostics.js";
 
 const SOURCE_URL = "https://www.mackolik.com/iddaa";
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36";
+const MAX_HTML_BYTES = 2_000_000;
 
 export interface MackolikIddaaProviderOptions {
   maxMatches?: number;
   requestTimeoutMs?: number;
-  executablePath?: string;
 }
 
 interface ParsedRow {
@@ -65,8 +64,8 @@ function teamLinks($: ReturnType<typeof load>, element: Parameters<ReturnType<ty
 
 export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuote[] {
   const $ = load(html);
-  const bodyText = normalizeSpace($("body").text());
-  const dateText = bodyText.match(/\b\d{1,2}\.\d{1,2}\.\d{4}\b/)?.[0]
+  const headingText = normalizeSpace($("h1,h2,h3,time").map((_index, element) => $(element).text()).get().join(" "));
+  const dateText = headingText.match(/\b\d{1,2}\.\d{1,2}\.\d{4}\b/)?.[0]
     ?? new Intl.DateTimeFormat("tr-TR", {
       timeZone: "Europe/Istanbul",
       day: "2-digit",
@@ -77,7 +76,7 @@ export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuot
   const rows: ParsedRow[] = [];
   const seen = new Set<string>();
 
-  $("tr,[role='row'],li").each((_index, element) => {
+  $("tr,[role='row']").each((_index, element) => {
     const cells = $(element).find("th,td").map((_cellIndex, cell) => normalizeSpace($(cell).text())).get();
     const rawText = normalizeSpace(cells.length ? cells.join(" ") : $(element).text());
     const prices = priceValues(rawText);
@@ -200,14 +199,13 @@ export function parseMackolikIddaaHtml(html: string, now = new Date()): OddsQuot
 
 export class MackolikIddaaProvider implements OddsProvider {
   readonly name = "mackolik_iddaa";
-  private browserPromise: Promise<Browser> | null = null;
   private lastFixtures: MatchFixture[] = [];
 
   constructor(private readonly options: MackolikIddaaProviderOptions = {}) {}
 
   async fetchQuotes(signal?: AbortSignal): Promise<OddsQuote[]> {
     const startedAt = new Date();
-    let mode = "http";
+    const mode = "http";
     let html = "";
 
     try {
@@ -222,27 +220,44 @@ export class MackolikIddaaProvider implements OddsProvider {
         redirect: "follow",
         signal: requestSignal,
       });
-      if (response.ok) html = await response.text();
+      if (response.ok) {
+        const contentLength = Number(response.headers.get("content-length") ?? 0);
+        if (contentLength > MAX_HTML_BYTES) {
+          throw new Error("Mackolik İddaa sayfasi beklenenden buyuk.");
+        }
+        const reader = response.body?.getReader();
+        if (reader) {
+          const decoder = new TextDecoder();
+          let total = 0;
+          const chunks: string[] = [];
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              total += value.byteLength;
+              if (total > MAX_HTML_BYTES) {
+                await reader.cancel();
+                throw new Error("Mackolik İddaa sayfasi beklenenden buyuk.");
+              }
+              chunks.push(decoder.decode(value, { stream: true }));
+            }
+            chunks.push(decoder.decode());
+            html = chunks.join("");
+          } finally {
+            reader.releaseLock();
+          }
+        } else {
+          html = await response.text();
+          if (Buffer.byteLength(html, "utf8") > MAX_HTML_BYTES) {
+            throw new Error("Mackolik İddaa sayfasi beklenenden buyuk.");
+          }
+        }
+      }
     } catch {
       html = "";
     }
 
     let quotes = html ? parseMackolikIddaaHtml(html, new Date()) : [];
-    if (quotes.length === 0) {
-      mode = "browser";
-      const browser = await this.browser();
-      const page = await browser.newPage({ userAgent: USER_AGENT, locale: "tr-TR" });
-      try {
-        await page.goto(SOURCE_URL, {
-          waitUntil: "domcontentloaded",
-          timeout: this.options.requestTimeoutMs ?? 30_000,
-        });
-        await page.waitForTimeout(1_500);
-        quotes = parseMackolikIddaaHtml(await page.content(), new Date());
-      } finally {
-        await page.close();
-      }
-    }
 
     const eventOrder = [...new Set(quotes.map((quote) => quote.sourceEventId))]
       .map((eventId) => ({
@@ -280,7 +295,7 @@ export class MackolikIddaaProvider implements OddsProvider {
       quoteCount: quotes.length,
       lastProviderRunAt: startedAt.toISOString(),
       lastSuccessAt: quotes.length > 0 ? new Date().toISOString() : null,
-      lastError: quotes.length > 0 ? null : "Mackolik İddaa bülteninde parse edilebilir oran bulunamadı.",
+      lastError: quotes.length > 0 ? null : "Mackolik İddaa bülteninde HTTP üzerinden parse edilebilir oran bulunamadı.",
       source: "https://www.mackolik.com/iddaa",
     });
 
@@ -291,23 +306,4 @@ export class MackolikIddaaProvider implements OddsProvider {
     return [...this.lastFixtures];
   }
 
-  async close(): Promise<void> {
-    const active = this.browserPromise;
-    this.browserPromise = null;
-    if (active) await (await active).close();
-  }
-
-  private browser(): Promise<Browser> {
-    if (!this.browserPromise) {
-      this.browserPromise = chromium.launch({
-        headless: true,
-        executablePath: this.options.executablePath,
-        args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-      }).catch((error) => {
-        this.browserPromise = null;
-        throw error;
-      });
-    }
-    return this.browserPromise;
-  }
 }
