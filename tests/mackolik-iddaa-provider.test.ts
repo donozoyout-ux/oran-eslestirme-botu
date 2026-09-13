@@ -1,31 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { parseMackolikIddaaHtml } from "../src/providers/mackolik-iddaa-provider.js";
+import { parseMackolikLegacyPayload, parseMackolikProgramPayload } from "../src/providers/mackolik-iddaa-provider.js";
 import { formatTelegramOddsSnapshot } from "../src/notifiers.js";
 
-describe("MackolikIddaaProvider parser", () => {
-  it("Mackolik İddaa bülteni satırından 1X2, çifte şans ve 2.5 alt/üst oranlarını üretir", () => {
-    const html = `
-      <html><body>
-        <h2>13.09.2026</h2>
-        <table>
-          <tr><td>18:00</td><td>1</td><td>X</td><td>2</td><td>1-X</td><td>1-2</td><td>X-2</td><td>Alt</td><td>Üst</td></tr>
-          <tr>
-            <td>TSL 3 <a href="/takim/galatasaray">Galatasaray</a> <a href="/takim/fenerbahce">Fenerbahçe</a></td>
-            <td>2.10</td><td>3.20</td><td>2.70</td>
-            <td>1.22</td><td>1.18</td><td>1.45</td>
-            <td>1.65</td><td>1.72</td>
-          </tr>
-        </table>
-      </body></html>`;
+function sampleRow(): string[] {
+  const row = Array.from({ length: 48 }, () => "");
+  row[0] = "500";
+  row[1] = "Galatasaray";
+  row[3] = "Fenerbahçe";
+  row[6] = "18:00";
+  row[7] = "13.09.2026";
+  row[10] = "12345";
+  row[13] = "3";
+  row[16] = "2.10";
+  row[17] = "3.20";
+  row[18] = "2.70";
+  row[19] = "1.22";
+  row[20] = "1.18";
+  row[21] = "1.45";
+  row[22] = "1.65";
+  row[23] = "1.72";
+  row[26] = "Türkiye Süper Lig";
+  return row;
+}
 
-    const quotes = parseMackolikIddaaHtml(html, new Date("2026-09-13T12:00:00Z"));
+describe("MackolikIddaaProvider parser", () => {
+  it("legacy Mackolik object-literal payload formatini guvenli JSON'a cevirir", () => {
+    const parsed = parseMackolikLegacyPayload("{m:[{d:'13.09.2026',m:[]}]}");
+    expect(parsed).toEqual({ m: [{ d: "13.09.2026", m: [] }] });
+  });
+
+  it("Mackolik arsiv akimindan 1X2, çifte şans ve 2.5 alt/üst oranlarını üretir", () => {
+    const payload = JSON.stringify({ m: [{ d: "13.09.2026", m: [sampleRow()] }] });
+    const quotes = parseMackolikProgramPayload(payload, new Date("2026-09-13T12:00:00Z"));
 
     expect(quotes).toHaveLength(8);
     expect(quotes.every((quote) => quote.provider === "mackolik_iddaa")).toBe(true);
     expect(quotes.every((quote) => quote.bookmakerKey === "iddaa")).toBe(true);
     expect(quotes[0]).toMatchObject({
+      sourceEventId: "500",
       homeTeam: "Galatasaray",
       awayTeam: "Fenerbahçe",
+      leagueName: "Türkiye Süper Lig",
       marketKey: "match_winner_3way",
       selectionKey: "home",
       price: 2.1,
@@ -35,12 +50,8 @@ describe("MackolikIddaaProvider parser", () => {
   });
 
   it("Telegram snapshot metninde temel İddaa oranlarını anlaşılır biçimde gösterir", () => {
-    const quotes = parseMackolikIddaaHtml(`
-      <html><body><h2>13.09.2026</h2><table>
-      <tr><td>18:00</td></tr>
-      <tr><td>TSL 3 <a>Galatasaray</a> <a>Fenerbahçe</a></td>
-      <td>2.10</td><td>3.20</td><td>2.70</td><td>1.22</td><td>1.18</td><td>1.45</td><td>1.65</td><td>1.72</td></tr>
-      </table></body></html>`, new Date("2026-09-13T12:00:00Z"));
+    const payload = JSON.stringify({ m: [{ d: "13.09.2026", m: [sampleRow()] }] });
+    const quotes = parseMackolikProgramPayload(payload, new Date("2026-09-13T12:00:00Z"));
 
     const message = formatTelegramOddsSnapshot(quotes);
     expect(message).toContain("İDDAA ORAN GÜNCELLEMESİ");
