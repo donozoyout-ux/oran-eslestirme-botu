@@ -41,13 +41,22 @@ export class RoleSeparatedOddsProvider implements OddsProvider {
       ...this.fixtureProviders,
     ];
 
-    const [scraperResult, supportResults] = await Promise.all([
-      this.settle(this.scraper, signal),
-      Promise.all(supportProviders.map((provider) => this.settle(provider, signal))),
-    ]);
+    const scraperResult = await this.settle(this.scraper, signal);
 
     const quotes: OddsQuote[] = [];
+    const regularSupport = supportProviders.filter((provider) => provider.name !== "mackolik_iddaa");
+    const deferredWebSupport = supportProviders.filter((provider) => provider.name === "mackolik_iddaa");
+
+    const supportResults = await Promise.all(regularSupport.map((provider) => this.settle(provider, signal)));
     for (const result of supportResults) {
+      if (result.ok) quotes.push(...result.quotes);
+    }
+
+    // Mackolik HTML parse'i BetExplorer'in aktif sayfasi ile ayni anda calismasin.
+    // Railway'in 512 MB sinirinda iki agir web isini eszamanli yapmak Node heap'ini
+    // gereksiz sekilde zirveye tasiyordu.
+    for (const provider of deferredWebSupport) {
+      const result = await this.settle(provider, signal);
       if (result.ok) quotes.push(...result.quotes);
     }
 
