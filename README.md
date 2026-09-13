@@ -23,6 +23,8 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - Opsiyonel Google Sheets canli aynasi: `Maclar`, `Oran_Gecmisi`, `Sinyaller`
 - Sportmonks API 3.0 ile fikstur, mac durumu, canli skor ve paket destekliyorsa mac onu/canli oranlar
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
+- Mackolik'in herkese acik İddaa bulteninden 1X2, Cifte Sans ve 2.5 Alt/Ust oranlarini dogrudan toplama
+- Mackolik / İddaa oranlarini ilk goruldugunde ve anlamli degisimde Telegram'a snapshot olarak gonderme
 - Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
 - Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
 - Mac onunde `1X2` bookmaker karsilastirmasi
@@ -31,6 +33,18 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - `/health`, `/status` ve korumali `/run-once` uclari
 - Ana adreste otomatik yenilenen canli durum paneli
 - Docker, Render ve GitHub Actions yapilandirmasi
+
+## Turkiye İddaa oran akisi
+
+Production modunda servis Mackolik'in giris gerektirmeyen İddaa bultenini ek oran kaynagi olarak okur. Bu kaynakta gorunen sabit İddaa oranlari ortak modele donusturulur:
+
+- Mac Sonucu: 1 / X / 2
+- Cifte Sans: 1-X / 1-2 / X-2
+- Toplam Gol 2.5: Alt / Ust
+
+`TURKISH_ODDS_TELEGRAM_ENABLED=true` iken ilk gorulen oran seti ve sonradan en az yaklasik %1 fiyat degisimi Telegram'a gonderilir. Ayni mac icin cooldown/dedup mekanizmasi korunur. `TURKISH_ODDS_MAX_MATCHES` bir turda Telegram ve panel icin izlenecek en yakin mac sayisini sinirlar.
+
+Mackolik kaynagi HTTP ile okunamazsa mevcut Chromium kurulumu ile tarayici fallback'i dener. Site CAPTCHA, oturum veya bolge engeli isterse sistem bunu asmaya calismaz; diger kaynaklar calismaya devam eder.
 
 ## Veri kaynagi sinirlari
 
@@ -191,6 +205,8 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `SPORTMONKS_INCLUDE_ODDS` | `true` | Paket izin veriyorsa prematch ve canli oranlari da ister |
 | `ODDS_TOLERANCE_PERCENT` | `2` | Bildirim icin azami goreli fark |
 | `POLL_INTERVAL_SECONDS` | `60` | Tarama araligi; en az 10 saniye |
+| `TURKISH_ODDS_MAX_MATCHES` | `12` | Mackolik/İddaa akiminda bir turda izlenecek en yakin mac sayisi |
+| `TURKISH_ODDS_TELEGRAM_ENABLED` | `true` | Mackolik/İddaa oran snapshotlarini Telegram'a yollar |
 | `SCRAPER_MAX_MATCHES` | `2` | Bir turda acilacak azami mac sayfasi |
 | `SCRAPER_PAGE_TIMEOUT_MS` | `60000` | Bir scraper sayfasi icin zaman asimi |
 | `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
