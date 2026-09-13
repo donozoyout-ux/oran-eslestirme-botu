@@ -6,6 +6,7 @@ export const dashboardShell = String.raw`
     <nav class="nav-list">
       <button class="nav-item active" data-view="overview" aria-controls="page-overview"><span>⌁</span>Genel Bakış</button>
       <button class="nav-item" data-view="matches" aria-controls="page-matches"><span>▦</span>Bugünün Maçları</button>
+      <button class="nav-item" data-view="iddaa" aria-controls="page-iddaa"><span>₺</span>İddaa Oranları</button>
       <button class="nav-item" data-view="analysis" aria-controls="page-analysis"><span>◫</span>Takım Analizi</button>
       <button class="nav-item" data-view="historical" aria-controls="page-historical"><span>↺</span>Geçmiş Veri</button>
       <button class="nav-item" data-view="market" aria-controls="page-market"><span>≋</span>Oranlar & Piyasa</button>
@@ -49,19 +50,29 @@ export const dashboardShell = String.raw`
         <div class="match-list" id="matchList"></div>
       </section>
 
+      <section class="page" id="page-iddaa" data-page="iddaa" aria-labelledby="iddaa-title">
+        <div class="page-heading"><div><p class="eyebrow">Türkiye oran akışı</p><h2 id="iddaa-title">İddaa Oranları</h2><p>Mackolik üzerindeki herkese açık İddaa bülteninden gelen maç ve oranları burada gör. Telegram aynı akışın ilk ve anlamlı değişen fiyatlarını bildirir.</p></div><div class="as-of">Kaynak <strong>Mackolik / İddaa</strong></div></div>
+        <div class="iddaa-summary" id="iddaaSummary"></div>
+        <div class="iddaa-toolbar">
+          <label class="search"><span aria-hidden="true">⌕</span><input id="iddaaSearch" type="search" placeholder="Takım veya lig ara" autocomplete="off"></label>
+          <span class="iddaa-live-note" id="iddaaUpdated">Veri bekleniyor</span>
+        </div>
+        <div class="iddaa-grid" id="iddaaGrid"></div>
+      </section>
+
       <section class="page" id="page-analysis" data-page="analysis" aria-labelledby="analysis-title">
-        <div class="page-heading"><div><p class="eyebrow">Read-only intelligence</p><h2 id="analysis-title">Maç Analizi</h2><p>Son 5/10 maç, iç-dış saha, gol eğilimi, şut/xG verisi ve Data Confidence değerini sade şekilde gösterir.</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">Read-only intelligence</p><h2 id="analysis-title">Takım Analizi</h2><p>Son 5/10 maç, iç-dış saha, gol eğilimi, şut/xG verisi ve Data Confidence değerini sade şekilde gösterir.</p></div></div>
         <div class="analysis-list" id="analysisList"></div>
       </section>
 
       <section class="page" id="page-historical" data-page="historical" aria-labelledby="historical-title">
-        <div class="page-heading"><div><p class="eyebrow">Odds archive research</p><h2 id="historical-title">Historical</h2><p>Benzer oran çizgilerine sahip eski maçların sonuç dağılımını ve örnek güvenini gösterir.</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">Odds archive research</p><h2 id="historical-title">Geçmiş Veri</h2><p>Benzer oran çizgilerine sahip eski maçların sonuç dağılımını ve örnek güvenini gösterir.</p></div></div>
         <div class="metric-grid compact" id="historicalMetrics"></div>
         <div class="two-column"><article class="panel"><div class="panel-head"><h3>Pattern analizi</h3><span class="quality-badge" id="historicalQuality">Bekleniyor</span></div><div id="historicalAnalysis"></div></article><article class="panel"><div class="panel-head"><h3>Arşiv bütünlüğü</h3></div><div class="diagnostic-list" id="historicalCompleteness"></div></article></div>
       </section>
 
       <section class="page" id="page-market" data-page="market" aria-labelledby="market-title">
-        <div class="page-heading"><div><p class="eyebrow">Fiyat gözlemi</p><h2 id="market-title">Market</h2><p>Bookmaker oranlarını, piyasa ortalamasını ve önemli fiyat hareketlerini karşılaştır.</p></div><a class="button secondary" href="/odds-history.csv">Odds CSV</a></div>
+        <div class="page-heading"><div><p class="eyebrow">Fiyat gözlemi</p><h2 id="market-title">Oranlar & Piyasa</h2><p>Bookmaker oranlarını, piyasa ortalamasını ve önemli fiyat hareketlerini karşılaştır.</p></div><a class="button secondary" href="/odds-history.csv">Odds CSV</a></div>
         <article class="panel table-panel"><div class="panel-head"><h3>Güncel oranlar</h3><span id="quoteUpdated">Veri mevcut değil</span></div><div class="table-scroll"><table><thead><tr><th>Maç</th><th>Faz</th><th>Pazar / Seçim / Line</th><th>Bookmaker</th><th>Provider</th><th>Oran</th><th>Güncelleme</th></tr></thead><tbody id="quotesTable"></tbody></table></div></article>
         <div class="two-column"><article class="panel"><div class="panel-head"><h3>Konsensüs</h3></div><div class="diagnostic-list" id="consensusList"></div></article><article class="panel"><div class="panel-head"><h3>Arbitraj</h3></div><div class="diagnostic-list" id="arbitrageList"></div></article></div>
       </section>
@@ -81,6 +92,6 @@ export const dashboardShell = String.raw`
 <div class="sidebar-scrim" id="sidebarScrim" hidden></div>
 <aside class="drawer" id="matchDrawer" aria-labelledby="drawerTitle" aria-modal="true" role="dialog" hidden>
   <header class="drawer-head"><div><p class="eyebrow" id="drawerLeague">Maç detayı</p><h2 id="drawerTitle">Karşılaşma</h2><p id="drawerMeta"></p></div><button class="icon-button" id="drawerClose" aria-label="Maç detayını kapat">×</button></header>
-  <nav class="drawer-tabs" aria-label="Maç detay sekmeleri"><button class="active" data-detail="summary">Özet</button><button data-detail="form">Form</button><button data-detail="venue">Venue</button><button data-detail="timing">Timing</button><button data-detail="stats">Stats</button><button data-detail="intelligence">Intelligence</button></nav>
+  <nav class="drawer-tabs" aria-label="Maç detay sekmeleri"><button class="active" data-detail="summary">Özet</button><button data-detail="odds">Oranlar</button><button data-detail="form">Form</button><button data-detail="venue">Venue</button><button data-detail="timing">Timing</button><button data-detail="stats">Stats</button><button data-detail="intelligence">Intelligence</button></nav>
   <div class="drawer-body" id="drawerBody"></div>
 </aside>`;

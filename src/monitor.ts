@@ -77,6 +77,25 @@ function analysisAlertState(signal: OddsAnalysisSignal): AlertSignalState {
   };
 }
 
+export interface RecentQuoteView {
+  provider: string;
+  sourceEventId: string;
+  canonicalEventId?: string;
+  event: string;
+  leagueName: string;
+  commenceTime: string;
+  phase: "prematch" | "live";
+  marketKey: string;
+  market: string;
+  selectionKey: string;
+  selection: string;
+  line: number | null;
+  bookmakerKey: string;
+  bookmaker: string;
+  price: number;
+  updatedAt: string;
+}
+
 export interface MonitorStatus {
   provider: string;
   notifier: string;
@@ -88,16 +107,8 @@ export interface MonitorStatus {
   lastRun: RunSummary | null;
   recentQuotesUpdatedAt: string | null;
   recentMatchesUpdatedAt: string | null;
-  recentQuotes: Array<{
-    event: string;
-    phase: "prematch" | "live";
-    market: string;
-    selection: string;
-    line: number | null;
-    bookmaker: string;
-    price: number;
-    updatedAt: string;
-  }>;
+  recentQuotes: RecentQuoteView[];
+  turkishOdds: RecentQuoteView[];
   recentMatches: Array<{
     event: string;
     phase: "prematch" | "live";
@@ -163,6 +174,7 @@ export class OddsMonitor {
       recentQuotesUpdatedAt: null,
       recentMatchesUpdatedAt: null,
       recentQuotes: [],
+      turkishOdds: [],
       recentMatches: [],
       marketAnalysis: { consensus: [], arbitrage: [] },
       couponCandidates: [],
@@ -457,17 +469,30 @@ export class OddsMonitor {
 
       this.statusValue.lastRun = summary;
 
+      const toStatusQuote = (quote: typeof comparison.freshQuotes[number]): RecentQuoteView => ({
+        provider: quote.provider,
+        sourceEventId: quote.sourceEventId,
+        ...(quote.canonicalEventId ? { canonicalEventId: quote.canonicalEventId } : {}),
+        event: `${quote.homeTeam} - ${quote.awayTeam}`,
+        leagueName: quote.leagueName,
+        commenceTime: quote.commenceTime,
+        phase: quote.phase,
+        marketKey: quote.marketKey,
+        market: quote.marketName,
+        selectionKey: quote.selectionKey,
+        selection: quote.selectionName,
+        line: quote.line,
+        bookmakerKey: quote.bookmakerKey,
+        bookmaker: quote.bookmakerName,
+        price: quote.price,
+        updatedAt: quote.updatedAt,
+      });
+      this.statusValue.turkishOdds = comparison.freshQuotes
+        .filter((quote) => quote.provider === "mackolik_iddaa")
+        .slice(0, 160)
+        .map(toStatusQuote);
       if (comparison.freshQuotes.length > 0) {
-        this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 40).map((quote) => ({
-          event: `${quote.homeTeam} - ${quote.awayTeam}`,
-          phase: quote.phase,
-          market: quote.marketName,
-          selection: quote.selectionName,
-          line: quote.line,
-          bookmaker: quote.bookmakerName,
-          price: quote.price,
-          updatedAt: quote.updatedAt,
-        }));
+        this.statusValue.recentQuotes = comparison.freshQuotes.slice(0, 120).map(toStatusQuote);
         this.statusValue.recentQuotesUpdatedAt = finishedAt.toISOString();
       }
 
