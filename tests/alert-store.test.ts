@@ -40,13 +40,15 @@ describe("AlertStore suppression", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "alert-store-"));
     directories.push(directory);
     const file = path.join(directory, "state.json");
+    const now = new Date();
+    const legacySentAt = new Date(now.getTime() - 5 * 60_000);
     fs.writeFileSync(file, JSON.stringify({
       version: 1,
-      sentAtByAlertId: { legacy: "2026-09-07T12:00:00.000Z" },
+      sentAtByAlertId: { legacy: legacySentAt.toISOString() },
     }));
     const store = new JsonAlertStore(file, 600);
-    expect(store.shouldSend("legacy", new Date("2026-09-07T12:05:00.000Z"), state())).toBe(false);
-    await store.markSent("new", new Date("2026-09-07T12:05:00.000Z"), state());
+    expect(store.shouldSend("legacy", now, state())).toBe(false);
+    await store.markSent("new", now, state());
     expect(JSON.parse(fs.readFileSync(file, "utf8")).version).toBe(2);
   });
 });

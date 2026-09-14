@@ -27,6 +27,11 @@ export interface AppConfig {
   scraperMaxMatches: number;
   turkishOddsMaxMatches: number;
   turkishOddsTelegramEnabled: boolean;
+  turkishOddsTelegramMinMovePercent: number;
+  turkishOddsTelegramCooldownMinutes: number;
+  turkishOddsTelegramWindowHours: number;
+  turkishOddsTelegramMaxAlertsPerRun: number;
+  telegramStartupMessageEnabled: boolean;
   scraperPageTimeoutMs: number;
   scraperWaitMs: number;
   scraperAllowVisibleBookmakerFallback: boolean;
@@ -159,7 +164,12 @@ export function loadConfig(): AppConfig {
     sportmonksIncludeOdds: booleanValue("SPORTMONKS_INCLUDE_ODDS", true),
     scraperMaxMatches: numberValue("SCRAPER_MAX_MATCHES", 2, { min: 1, max: 10 }),
     turkishOddsMaxMatches: numberValue("TURKISH_ODDS_MAX_MATCHES", 12, { min: 1, max: 50 }),
-    turkishOddsTelegramEnabled: booleanValue("TURKISH_ODDS_TELEGRAM_ENABLED", true),
+    turkishOddsTelegramEnabled: booleanValue("TURKISH_ODDS_TELEGRAM_ENABLED", false),
+    turkishOddsTelegramMinMovePercent: numberValue("TURKISH_ODDS_TELEGRAM_MIN_MOVE_PERCENT", 8, { min: 1, max: 100 }),
+    turkishOddsTelegramCooldownMinutes: numberValue("TURKISH_ODDS_TELEGRAM_COOLDOWN_MINUTES", 60, { min: 1, max: 1_440 }),
+    turkishOddsTelegramWindowHours: numberValue("TURKISH_ODDS_TELEGRAM_WINDOW_HOURS", 6, { min: 1, max: 48 }),
+    turkishOddsTelegramMaxAlertsPerRun: numberValue("TURKISH_ODDS_TELEGRAM_MAX_ALERTS_PER_RUN", 1, { min: 1, max: 10 }),
+    telegramStartupMessageEnabled: booleanValue("TELEGRAM_STARTUP_MESSAGE_ENABLED", false),
     scraperPageTimeoutMs: numberValue("SCRAPER_PAGE_TIMEOUT_MS", 60_000, { min: 5_000, max: 60_000 }),
     scraperWaitMs: numberValue("SCRAPER_WAIT_MS", 2_500, { min: 500, max: 10_000 }),
     scraperAllowVisibleBookmakerFallback: booleanValue("SCRAPER_ALLOW_VISIBLE_BOOKMAKER_FALLBACK", true),

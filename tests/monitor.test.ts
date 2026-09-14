@@ -71,11 +71,15 @@ class CollectingNotifier implements Notifier {
   readonly name = "collecting";
   readonly sent: OddsMatch[] = [];
   readonly signals: OddsAnalysisSignal[] = [];
+  readonly oddsSnapshots: OddsQuote[][] = [];
   async send(match: OddsMatch): Promise<void> {
     this.sent.push(match);
   }
   async sendAnalysisSignal(signal: OddsAnalysisSignal): Promise<void> {
     this.signals.push(signal);
+  }
+  async sendOddsSnapshot(quotes: OddsQuote[]): Promise<void> {
+    this.oddsSnapshots.push(quotes);
   }
 }
 
@@ -85,6 +89,24 @@ class MovingProvider implements OddsProvider {
   async fetchQuotes(): Promise<OddsQuote[]> {
     this.calls += 1;
     return [{ ...baseQuote, bookmakerKey: "moving-a", bookmakerName: "Moving A", price: this.calls === 1 ? 2.6 : 2.34 }];
+  }
+}
+
+
+class TurkishOddsProvider implements OddsProvider {
+  readonly name = "turkish-odds";
+  private calls = 0;
+  async fetchQuotes(): Promise<OddsQuote[]> {
+    this.calls += 1;
+    const prices = [2, 2.08, 2.3, 2.6];
+    return [{
+      ...baseQuote,
+      provider: "mackolik_iddaa",
+      bookmakerKey: "iddaa",
+      bookmakerName: "İddaa (Mackolik)",
+      sourceEventId: "iddaa-1",
+      price: prices[Math.min(this.calls - 1, prices.length - 1)]!,
+    }];
   }
 }
 
@@ -175,6 +197,35 @@ describe("OddsMonitor", () => {
     expect(afterEmptyPoll.recentMatches).toEqual(afterFirst.recentMatches);
     expect(afterEmptyPoll.recentQuotesUpdatedAt).toBe(afterFirst.recentQuotesUpdatedAt);
     expect(afterEmptyPoll.recentMatchesUpdatedAt).toBe(afterFirst.recentMatchesUpdatedAt);
+  });
+
+
+  it("ham İddaa snapshot spamini engeller; ilk gorus ve kucuk hareket Telegram'a gitmez", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+    const notifier = new CollectingNotifier();
+    const monitor = new OddsMonitor(
+      new TurkishOddsProvider(),
+      notifier,
+      new MemoryAlertStore(0),
+      {
+        ...monitorOptions(),
+        turkishOddsTelegramEnabled: true,
+        turkishOddsTelegramMinMovePercent: 8,
+        turkishOddsTelegramCooldownMinutes: 60,
+        turkishOddsTelegramWindowHours: 6,
+        turkishOddsTelegramMaxAlertsPerRun: 1,
+      },
+      dailySheet(),
+    );
+
+    await monitor.runOnce(); // baseline only
+    await monitor.runOnce(); // +4%, below threshold
+    await monitor.runOnce(); // +15%, meaningful -> one alert
+    await monitor.runOnce(); // meaningful again but 60 min local cooldown
+
+    expect(notifier.oddsSnapshots).toHaveLength(1);
+    expect(notifier.oddsSnapshots[0]?.[0]?.price).toBe(2.3);
   });
 
   it("oran dususunu tek basina Telegram tahmini saymaz", async () => {
