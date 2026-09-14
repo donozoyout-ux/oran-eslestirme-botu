@@ -24,7 +24,7 @@ Futbol oranlarini ortak bir modele donusturen, ayni macin ayni pazar/secim/cizgi
 - Sportmonks API 3.0 ile fikstur, mac durumu, canli skor ve paket destekliyorsa mac onu/canli oranlar
 - Ucretsiz The Odds API adaptoru (`h2h`, `spreads`, `totals`)
 - Mackolik'in herkese acik İddaa bulteninden 1X2, Cifte Sans ve 2.5 Alt/Ust oranlarini dogrudan toplama
-- Mackolik / İddaa oranlarini ilk goruldugunde ve anlamli degisimde Telegram'a snapshot olarak gonderme
+- Mackolik / İddaa oranlarini panelde surekli gosterme; ham Telegram snapshot'larini varsayilan olarak kapali tutma
 - Herkese acik BetExplorer sayfalarindan dusuk frekansli web scraping
 - Canli maclarda `1X2`, `Alt/Ust`, Asya handikap, Cifte Sans, KG Var/Yok ve Beraberlikte Iade
 - Mac onunde `1X2` bookmaker karsilastirmasi
@@ -42,7 +42,7 @@ Production modunda servis Mackolik'in giris gerektirmeyen İddaa bultenini ek or
 - Cifte Sans: 1-X / 1-2 / X-2
 - Toplam Gol 2.5: Alt / Ust
 
-`TURKISH_ODDS_TELEGRAM_ENABLED=true` iken ilk gorulen oran seti ve sonradan en az yaklasik %1 fiyat degisimi Telegram'a gonderilir. Ayni mac icin cooldown/dedup mekanizmasi korunur. `TURKISH_ODDS_MAX_MATCHES` bir turda Telegram ve panel icin izlenecek en yakin mac sayisini sinirlar.
+Ham İddaa snapshot bildirimi varsayilan olarak kapali (`TURKISH_ODDS_TELEGRAM_ENABLED=false`). Panel oranlari yine gosterir. Bu ozellik elle acilirsa ilk gorulen oran seti Telegram'a gitmez; baseline olarak kaydedilir. Yalnizca varsayilan en az %8 fiyat degisimi, maca en fazla 6 saat kalmasi, 60 dakikalik ozel cooldown ve tur basina en fazla 1 bildirim kosullari birlikte saglandiginda snapshot gonderilir. Boylece ham oran akisi Telegram'i spamlamaz; asil Telegram akisi smart/value/arbitraj sinyallerinde kalir.
 
 Mackolik kaynagi HTTP ile okunamazsa mevcut Chromium kurulumu ile tarayici fallback'i dener. Site CAPTCHA, oturum veya bolge engeli isterse sistem bunu asmaya calismaz; diger kaynaklar calismaya devam eder.
 
@@ -206,7 +206,11 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `ODDS_TOLERANCE_PERCENT` | `2` | Bildirim icin azami goreli fark |
 | `POLL_INTERVAL_SECONDS` | `60` | Tarama araligi; en az 10 saniye |
 | `TURKISH_ODDS_MAX_MATCHES` | `12` | Mackolik/İddaa akiminda bir turda izlenecek en yakin mac sayisi |
-| `TURKISH_ODDS_TELEGRAM_ENABLED` | `true` | Mackolik/İddaa oran snapshotlarini Telegram'a yollar |
+| `TURKISH_ODDS_TELEGRAM_ENABLED` | `false` | Ham Mackolik/İddaa snapshot kanalini acar; panel bundan bagimsiz calisir |
+| `TURKISH_ODDS_TELEGRAM_MIN_MOVE_PERCENT` | `8` | Ham snapshot tekrar bildirimi icin minimum fiyat degisimi |
+| `TURKISH_ODDS_TELEGRAM_COOLDOWN_MINUTES` | `60` | Ayni mac icin ham snapshot tekrar bekleme suresi |
+| `TURKISH_ODDS_TELEGRAM_WINDOW_HOURS` | `6` | Ham snapshot icin maca kalan azami saat |
+| `TURKISH_ODDS_TELEGRAM_MAX_ALERTS_PER_RUN` | `1` | Tek taramada gonderilecek azami ham snapshot |
 | `SCRAPER_MAX_MATCHES` | `2` | Bir turda acilacak azami mac sayfasi |
 | `SCRAPER_PAGE_TIMEOUT_MS` | `60000` | Bir scraper sayfasi icin zaman asimi |
 | `SCRAPER_WAIT_MS` | `2500` | Dinamik oran tablosunu bekleme suresi |
@@ -224,6 +228,7 @@ Tokeni GitHub'a veya mesajlasma ekranina acik olarak koymayin. Yanlislikla payla
 | `EVENT_KICKOFF_TOLERANCE_MINUTES` | `10` | Providerlar arasi mac baslangic saati toleransi |
 | `SURPRISE_ODDS_THRESHOLD` | `2.5` | Iki yakin oranin ortalamasi bu degere ulasirsa surpriz adayi etiketi |
 | `ODDS_MOVEMENT_THRESHOLD_PERCENT` | `8` | Acilis oranina gore analiz sinyali uretecek degisim |
+| `TELEGRAM_STARTUP_MESSAGE_ENABLED` | `false` | Deploy/restart baslangic Telegram test mesajini acar |
 | `DRY_RUN` | `true` | Telegram yerine terminale yazar |
 | `ADMIN_TOKEN` | bos | `/run-once` ucunu acar ve korur |
 | `STATE_FILE` | `./data/alert-state.json` | Bildirim tekillestirme durumu |
