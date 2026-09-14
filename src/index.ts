@@ -114,6 +114,10 @@ try {
     prematchAlertMinConfidence: config.prematchAlertMinConfidence,
     eventKickoffToleranceMinutes: config.eventKickoffToleranceMinutes,
     turkishOddsTelegramEnabled: config.turkishOddsTelegramEnabled,
+    turkishOddsTelegramMinMovePercent: config.turkishOddsTelegramMinMovePercent,
+    turkishOddsTelegramCooldownMinutes: config.turkishOddsTelegramCooldownMinutes,
+    turkishOddsTelegramWindowHours: config.turkishOddsTelegramWindowHours,
+    turkishOddsTelegramMaxAlertsPerRun: config.turkishOddsTelegramMaxAlertsPerRun,
   }, dailySheet, historicalArchive, matchIntelligence);
   const server = createServer(monitor, config.adminToken);
 
@@ -140,13 +144,20 @@ try {
       sportKeys: config.sportKeys,
       bookmakerKeys: config.bookmakerKeys,
       turkishOddsTelegramEnabled: config.turkishOddsTelegramEnabled,
+      turkishOddsTelegramMinMovePercent: config.turkishOddsTelegramMinMovePercent,
+      turkishOddsTelegramCooldownMinutes: config.turkishOddsTelegramCooldownMinutes,
+      turkishOddsTelegramWindowHours: config.turkishOddsTelegramWindowHours,
+      turkishOddsTelegramMaxAlertsPerRun: config.turkishOddsTelegramMaxAlertsPerRun,
+      telegramStartupMessageEnabled: config.telegramStartupMessageEnabled,
       turkishOddsMaxMatches: config.turkishOddsMaxMatches,
     });
 
-    if (!config.dryRun) {
+    if (!config.dryRun && config.telegramStartupMessageEnabled) {
       void sendTelegramStartupMessage(config.telegramBotToken!, config.telegramChatId!)
         .then(() => logger.info("Telegram baslangic testi basarili."))
         .catch((error) => logger.error("Telegram baslangic testi basarisiz.", { error: errorMessage(error) }));
+    } else if (!config.dryRun) {
+      logger.info("Telegram notifier aktif; gereksiz restart bildirimi kapali.");
     } else {
       logger.warn("Telegram bildirimleri kapali: DRY_RUN=true. Railway Variables icinde DRY_RUN=false yapin.");
     }
