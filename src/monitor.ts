@@ -19,6 +19,10 @@ export interface MonitorOptions {
   prematchAlertMinConfidence: number;
   eventKickoffToleranceMinutes?: number;
   turkishOddsTelegramEnabled?: boolean;
+  turkishOddsTelegramMinMovePercent?: number;
+  turkishOddsTelegramCooldownMinutes?: number;
+  turkishOddsTelegramWindowHours?: number;
+  turkishOddsTelegramMaxAlertsPerRun?: number;
 }
 
 function matchAlertState(match: OddsMatch): AlertSignalState {
@@ -149,6 +153,8 @@ export class OddsMonitor {
   private stopped = false;
   private readonly statusValue: MonitorStatus;
   private readonly canonicalMatchResolver: CanonicalMatchResolver;
+  private readonly turkishOddsObservedEvents = new Set<string>();
+  private readonly turkishOddsLastSentAt = new Map<string, number>();
 
   constructor(
     private readonly provider: OddsProvider,
@@ -287,16 +293,24 @@ export class OddsMonitor {
 
       if (this.options.turkishOddsTelegramEnabled && this.notifier.sendOddsSnapshot) {
         const groups = new Map<string, typeof comparison.freshQuotes>();
+        const windowHours = this.options.turkishOddsTelegramWindowHours ?? 6;
         for (const quote of comparison.freshQuotes) {
           if (quote.provider !== "mackolik_iddaa" || quote.phase !== "prematch") continue;
+          const kickoffDeltaMs = Date.parse(quote.commenceTime) - comparisonTime.getTime();
+          if (!Number.isFinite(kickoffDeltaMs) || kickoffDeltaMs <= 0 || kickoffDeltaMs > windowHours * 60 * 60_000) continue;
           const key = quote.canonicalEventId ?? quote.sourceEventId;
           const rows = groups.get(key) ?? [];
           rows.push(quote);
           groups.set(key, rows);
         }
+
         const orderedGroups = [...groups.entries()]
-          .sort((a, b) => Date.parse(a[1][0]?.commenceTime ?? "") - Date.parse(b[1][0]?.commenceTime ?? ""))
-          .slice(0, 6);
+          .sort((a, b) => Date.parse(a[1][0]?.commenceTime ?? "") - Date.parse(b[1][0]?.commenceTime ?? ""));
+        const minMovePercent = this.options.turkishOddsTelegramMinMovePercent ?? 8;
+        const cooldownMs = (this.options.turkishOddsTelegramCooldownMinutes ?? 60) * 60_000;
+        const maxAlertsPerRun = this.options.turkishOddsTelegramMaxAlertsPerRun ?? 1;
+        let snapshotAlertsSent = 0;
+
         for (const [eventId, quotesForEvent] of orderedGroups) {
           const sorted = [...quotesForEvent].sort((a, b) =>
             [a.marketKey, a.selectionKey, a.line ?? 0].join("|").localeCompare([b.marketKey, b.selectionKey, b.line ?? 0].join("|"))
@@ -306,18 +320,40 @@ export class OddsMonitor {
           const thresholds: AlertSignalState["thresholds"] = {};
           sorted.forEach((quote, index) => {
             metrics[`p${index}`] = quote.price;
-            thresholds[`p${index}`] = { relativePercent: 1 };
+            thresholds[`p${index}`] = { relativePercent: minMovePercent };
           });
           const alertId = `turkish-odds:${eventId}`;
           const snapshotState: AlertSignalState = { stateKey, metrics, thresholds };
           const now = new Date();
+
+          // İlk görülen ham oran setini Telegram'a göndermiyoruz. Sadece baseline
+          // olarak saklıyoruz; böylece bot her restart/deploy sonrası mesaj yağdırmıyor.
+          if (!this.turkishOddsObservedEvents.has(eventId)) {
+            this.turkishOddsObservedEvents.add(eventId);
+            await this.alertStore.markSent(alertId, now, snapshotState);
+            alertsSuppressed += 1;
+            continue;
+          }
+
+          const lastActualSend = this.turkishOddsLastSentAt.get(eventId) ?? 0;
+          if (now.getTime() - lastActualSend < cooldownMs) {
+            alertsSuppressed += 1;
+            continue;
+          }
           if (!this.alertStore.shouldSend(alertId, now, snapshotState)) {
             alertsSuppressed += 1;
             continue;
           }
+          if (snapshotAlertsSent >= maxAlertsPerRun) {
+            alertsSuppressed += 1;
+            continue;
+          }
+
           try {
             await this.notifier.sendOddsSnapshot(sorted);
             await this.alertStore.markSent(alertId, now, snapshotState);
+            this.turkishOddsLastSentAt.set(eventId, now.getTime());
+            snapshotAlertsSent += 1;
             alertsSent += 1;
           } catch (error) {
             this.statusValue.totals.errors += 1;
