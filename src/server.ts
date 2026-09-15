@@ -1,5 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { dashboardHtml, legacyDashboardHtml } from "./dashboard.js";
+import { legacyDashboardHtml, v2DashboardHtml } from "./dashboard.js";
 import { buildV2Matches, buildV2Recommendations } from "./v2-api.js";
 import type { OddsMonitor } from "./monitor.js";
 import { getProviderDiagnostics } from "./provider-diagnostics.js";
@@ -13,7 +13,7 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
   response.end(`${JSON.stringify(payload)}\n`);
 }
 
-function sendDashboard(response: ServerResponse, html = dashboardHtml): void {
+function sendDashboard(response: ServerResponse, html = v2DashboardHtml): void {
   response.writeHead(200, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-cache",
