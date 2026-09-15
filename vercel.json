@@ -2,8 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/", "destination": "/api/dashboard" },
+    { "source": "/v2", "destination": "/api/dashboard" },
+    { "source": "/legacy", "destination": "/api/legacy-dashboard" },
     { "source": "/health", "destination": "/api/proxy?path=health" },
     { "source": "/status", "destination": "/api/proxy?path=status" },
+    { "source": "/v2/matches", "destination": "/api/proxy?path=v2/matches" },
+    { "source": "/v2/matches/:id", "destination": "/api/proxy?path=v2/matches/:id" },
+    { "source": "/v2/recommendations", "destination": "/api/proxy?path=v2/recommendations" },
     { "source": "/daily-matches.csv", "destination": "/api/proxy?path=daily-matches.csv" },
     { "source": "/odds-history.csv", "destination": "/api/proxy?path=odds-history.csv" }
   ]
