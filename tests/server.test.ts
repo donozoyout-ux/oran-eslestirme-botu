@@ -69,7 +69,7 @@ async function startServer() {
 }
 
 describe("dashboard", () => {
-  it("ana sayfada durum panelini sunar", async () => {
+  it("ana sayfada V2 panelini, legacy yolunda eski paneli sunar", async () => {
     const baseUrl = await startServer();
     const response = await fetch(`${baseUrl}/`);
     const html = await response.text();
@@ -77,11 +77,25 @@ describe("dashboard", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
-    expect(html).toContain("Oran Eşleştirme Botu");
-    expect(html).toContain("fetch('/status'");
-    expect(html).toContain("Match Intelligence");
-    expect(html).toContain("Data Confidence");
-    expect(html).not.toMatch(/>PLAY<|>WATCH<|>PASS</);
+    expect(html).toContain("Oran Analiz");
+    expect(html).toContain("Bugünün Maçları");
+    expect(html).toContain('fetch("/v2/matches"');
+
+    const legacy = await fetch(`${baseUrl}/legacy`);
+    const legacyHtml = await legacy.text();
+    expect(legacy.status).toBe(200);
+    expect(legacyHtml).toContain("Oran Eşleştirme Botu");
+    expect(legacyHtml).toContain("Match Intelligence");
+  });
+
+  it("V2 maç ve öneri uçlarını sunar", async () => {
+    const baseUrl = await startServer();
+    const matches = await fetch(`${baseUrl}/v2/matches`);
+    const recommendations = await fetch(`${baseUrl}/v2/recommendations`);
+    expect(matches.status).toBe(200);
+    expect(await matches.json()).toMatchObject({ summary: { matches: 0 }, matches: [] });
+    expect(recommendations.status).toBe(200);
+    expect(await recommendations.json()).toMatchObject({ strong: [], excluded: [] });
   });
 
   it("saglik ucunu korur", async () => {
