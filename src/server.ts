@@ -1,5 +1,6 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { dashboardHtml } from "./dashboard.js";
+import { legacyDashboardHtml, v2DashboardHtml } from "./dashboard.js";
+import { buildV2Matches, buildV2Recommendations } from "./v2-api.js";
 import type { OddsMonitor } from "./monitor.js";
 import { getProviderDiagnostics } from "./provider-diagnostics.js";
 
@@ -12,7 +13,7 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
   response.end(`${JSON.stringify(payload)}\n`);
 }
 
-function sendDashboard(response: ServerResponse): void {
+function sendDashboard(response: ServerResponse, html = v2DashboardHtml): void {
   response.writeHead(200, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-cache",
@@ -21,7 +22,7 @@ function sendDashboard(response: ServerResponse): void {
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
   });
-  response.end(dashboardHtml);
+  response.end(html);
 }
 
 function sendCsv(response: ServerResponse, filename: string, content: string): void {
@@ -45,8 +46,13 @@ export function createServer(monitor: OddsMonitor, adminToken?: string): http.Se
     const method = request.method ?? "GET";
     const url = new URL(request.url ?? "/", "http://localhost");
 
-    if (method === "GET" && url.pathname === "/") {
+    if (method === "GET" && (url.pathname === "/" || url.pathname === "/v2")) {
       sendDashboard(response);
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/legacy") {
+      sendDashboard(response, legacyDashboardHtml);
       return;
     }
 
@@ -66,6 +72,27 @@ export function createServer(monitor: OddsMonitor, adminToken?: string): http.Se
         ...monitor.getStatus(),
         providerDiagnostics: getProviderDiagnostics(),
       });
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/v2/matches") {
+      sendJson(response, 200, buildV2Matches(monitor.getStatus()));
+      return;
+    }
+
+    if (method === "GET" && url.pathname.startsWith("/v2/matches/")) {
+      const id = decodeURIComponent(url.pathname.slice("/v2/matches/".length));
+      const match = buildV2Matches(monitor.getStatus()).matches.find((item) => item.canonicalEventId === id);
+      if (!match) {
+        sendJson(response, 404, { error: "Maç bulunamadı." });
+        return;
+      }
+      sendJson(response, 200, match);
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/v2/recommendations") {
+      sendJson(response, 200, buildV2Recommendations(monitor.getStatus()));
       return;
     }
 

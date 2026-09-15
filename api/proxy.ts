@@ -3,7 +3,13 @@ const ALLOWED_PATHS = new Set([
   "status",
   "daily-matches.csv",
   "odds-history.csv",
+  "v2/matches",
+  "v2/recommendations",
 ]);
+
+function isAllowedPath(path: string): boolean {
+  return ALLOWED_PATHS.has(path) || path.startsWith("v2/matches/");
+}
 
 interface BackendTarget {
   baseUrl: string | null;
@@ -51,7 +57,7 @@ function backendTarget(): BackendTarget {
 
 export default async function handler(request: any, response: any): Promise<void> {
   const path = typeof request.query?.path === "string" ? request.query.path : "";
-  if (!ALLOWED_PATHS.has(path)) {
+  if (!isAllowedPath(path)) {
     response.statusCode = 404;
     response.setHeader("content-type", "application/json; charset=utf-8");
     response.end(JSON.stringify({ error: "Bulunamadi." }));
